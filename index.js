@@ -5,8 +5,14 @@ const https = require('https');
 const querystring = require('querystring');
 const fs = require('fs');
 const path = require('path');
-const PDFDocument = require('pdfkit');
 require('dotenv').config();
+
+let PDFDocument;
+try {
+  PDFDocument = require('pdfkit');
+} catch (e) {
+  console.log('[PDFKIT NOTICE] pdfkit module loading handled safely');
+}
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -743,6 +749,9 @@ async function runCampaignDispatches() {
 // PDF REPORT GENERATOR
 app.get('/api/download-report-pdf', (req, res) => {
   try {
+    if (!PDFDocument) {
+      return res.status(500).send('PDF generation requires pdfkit module');
+    }
     const doc = new PDFDocument({ margin: 40 });
     const filename = `drivri_campaign_report_${Date.now()}.pdf`;
 
