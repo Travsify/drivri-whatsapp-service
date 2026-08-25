@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Environment Variables loaded securely
+// Live API Keys & Credentials loaded securely via Environment Variables
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const BASE_URL = process.env.EVOLUTION_BASE_URL || 'http://2.24.128.226:8080';
@@ -29,7 +29,7 @@ const SUPPORT_PHONE = '+44 7988 599 326';
 const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
 const DIRECTOR_EMAIL = 'info@drivri.co.uk';
 
-// Memory Stores & Campaign State
+// Memory Stores
 const customerMemory = new Map();
 const answeredMessageIds = new Set();
 let isWhatsAppInitialized = false;
@@ -71,6 +71,33 @@ function addLog(msg) {
   if (activeCampaign.logs.length > 100) activeCampaign.logs.pop();
   console.log(formatted);
 }
+
+// -------------------------------------------------------------
+// OFFICIAL DRIVRI PRICING TABLES
+// -------------------------------------------------------------
+const PRICING_VAN_RENTAL = {
+  small: { name: 'Small Van (SWB)', hourly: 18, dailyCap8h: 108 },
+  medium: { name: 'Medium Van (MWB)', hourly: 24, dailyCap8h: 144 },
+  large: { name: 'Large Van (LWB)', hourly: 28, dailyCap8h: 168 },
+  luton: { name: 'Luton Van', hourly: 32, dailyCap8h: 192 },
+  refrigerated: { name: 'Refrigerated Van', hourly: 42, dailyCap8h: 252 }
+};
+
+const PRICING_DRIVER_HIRE = {
+  B: { name: 'Category B (Standard Car / Small Van up to 3.5t)', hourly: 25 },
+  C1: { name: 'Category C1 (Medium Goods 3.5t–7.5t)', hourly: 32 },
+  C: { name: 'Category C (Large Goods over 7.5t)', hourly: 28 },
+  D1: { name: 'Category D1 (Minibus)', hourly: 34 },
+  'C+E': { name: 'Category C+E (LGV with Trailer)', hourly: 30 }
+};
+
+const INSURANCE_PRODUCTS = {
+  goods_in_transit: { name: 'Goods in Transit (£10m cover)', hourly: 2.50, dailyCap: 20 },
+  hire_reward: { name: 'Hire & Reward (Paid Courier Work)', hourly: 3.00, dailyCap: 25 },
+  public_liability: { name: 'Public Liability (£5m cover)', hourly: 1.50, dailyCap: 12 },
+  comprehensive_hire: { name: 'Comprehensive Self-Drive Cover', hourly: 3.50, dailyCap: 28 },
+  personal_effects: { name: 'Personal Effects Cover (£25,000)', hourly: 1.20, dailyCap: 9 }
+};
 
 // -------------------------------------------------------------
 // EVOLUTION API & STRIPE HELPERS
@@ -128,6 +155,134 @@ function sendText(targetJid, text) {
   });
 }
 
+function createStripeCheckoutSession(serviceName, amountPence, customerEmail, customerName, description = null) {
+  return new Promise((resolve) => {
+    if (!STRIPE_SECRET_KEY) return resolve({ success: false, error: 'Stripe key missing' });
+    const postData = querystring.stringify({
+      'mode': 'payment',
+      'payment_method_types[0]': 'card',
+      'line_items[0][price_data][currency]': 'gbp',
+      'line_items[0][price_data][unit_amount]': Math.round(amountPence),
+      'line_items[0][price_data][product_data][name]': serviceName,
+      'line_items[0][price_data][product_data][description]': description || `Drivri Logistics Reservation for ${customerName || 'Valued Customer'} (Includes 20% UK VAT)`,
+      'line_items[0][quantity]': '1',
+      'customer_email': (customerEmail && customerEmail.includes('@')) ? customerEmail : undefined,
+      'success_url': 'https://drivri.co.uk/booking-success?session_id={CHECKOUT_SESSION_ID}',
+      'cancel_url': 'https://drivri.co.uk/booking-cancel'
+    });
+
+    const options = {
+      hostname: 'api.stripe.com',
+      port: 443,
+      path: '/v1/checkout/sessions',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${STRIPE_SECRET_KEY}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(body);
+          if (res.statusCode === 200 && parsed.url) {
+            resolve({ success: true, url: parsed.url, sessionId: parsed.id });
+          } else {
+            resolve({ success: false, error: parsed.error ? parsed.error.message : body });
+          }
+        } catch (e) {
+          resolve({ success: false, error: e.message });
+        }
+      });
+    });
+
+    req.on('error', err => resolve({ success: false, error: err.message }));
+    req.write(postData);
+    req.end();
+  });
+}
+
+function sendBookingConfirmationEmail(customerEmail, customerName, serviceName, bookingDetails, financialBreakdown, complyCubeStatus = null, stripePaymentUrl = null, stripeZeroDepositUrl = null) {
+  return new Promise((resolve) => {
+    if (!RESEND_API_KEY) return resolve({ status: 400, error: 'Resend key missing' });
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
+        <div style="background-color: #0d1b2a; color: #ffffff; padding: 24px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px;">Drivri Logistics & Fleet Solutions</h1>
+          <p style="margin: 4px 0 0 0; color: #00b4d8; font-size: 14px;">Official Invoice & Reservation Summary</p>
+        </div>
+        <div style="padding: 24px; color: #333333; line-height: 1.6;">
+          <p>Dear <strong>${customerName}</strong>,</p>
+          <p>Thank you for choosing Drivri! Your reservation quote for <strong>${serviceName}</strong> is ready below.</p>
+          
+          <div style="background-color: #f8f9fa; border-left: 4px solid #00b4d8; padding: 16px; margin: 20px 0; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0d1b2a;">Customer & Booking Telemetry</h3>
+            <p style="margin: 4px 0;"><strong>Customer Name:</strong> ${customerName}</p>
+            <p style="margin: 4px 0;"><strong>Email Address:</strong> ${customerEmail}</p>
+            <p style="margin: 4px 0;"><strong>Service Reserved:</strong> ${serviceName}</p>
+            <p style="margin: 4px 0;"><strong>Reservation Details:</strong> ${bookingDetails}</p>
+            <p style="margin: 4px 0; color: #0288d1;"><strong>Included Daily Mileage:</strong> 200 Miles included daily (£0.60/mile on excess miles)</p>
+            <p style="margin: 4px 0; color: #d90429;"><strong>Booking Terms:</strong> Van daily rate is capped at 8 hours max per day.</p>
+          </div>
+
+          <div style="background-color: #ffffff; border: 1px solid #e0e0e0; padding: 16px; margin: 20px 0; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #0d1b2a;">Itemized Financial & Tax Breakdown</h3>
+            <p style="margin: 4px 0;"><strong>Rental Subtotal:</strong> ${financialBreakdown.subtotal}</p>
+            <p style="margin: 4px 0;"><strong>Selected Insurance Product:</strong> ${financialBreakdown.insurance}</p>
+            <p style="margin: 4px 0;"><strong>UK VAT (20%):</strong> ${financialBreakdown.vat}</p>
+            <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 12px 0;">
+            ${financialBreakdown.depositPolicy ? `<p style="margin: 4px 0;"><strong>Option 1 (Standard Refundable Security Deposit):</strong> ${financialBreakdown.depositPolicy}</p>` : ''}
+            ${financialBreakdown.zeroDepositPolicy ? `<p style="margin: 4px 0;"><strong>Option 2 (Zero Security Deposit Option):</strong> ${financialBreakdown.zeroDepositPolicy}</p>` : ''}
+            <p style="margin: 8px 0 0 0; font-size: 16px; color: #0d1b2a;"><strong>Net Payable Total:</strong> <strong>${financialBreakdown.totalAmount || 'As Quoted'}</strong></p>
+          </div>
+
+          ${stripePaymentUrl ? `
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${stripePaymentUrl}" style="background-color: #00b4d8; color: #ffffff; padding: 16px 28px; font-size: 15px; font-weight: bold; text-decoration: none; border-radius: 6px; display: inline-block; margin-bottom: 12px;">💳 Option 1: Pay Rental + Standard Refundable Deposit</a>
+            ${stripeZeroDepositUrl ? `<br><a href="${stripeZeroDepositUrl}" style="background-color: #1976d2; color: #ffffff; padding: 14px 24px; font-size: 14px; font-weight: bold; text-decoration: none; border-radius: 6px; display: inline-block;">🛡️ Option 2: Pay Rental + 25% Zero-Deposit Waiver Fee</a>` : ''}
+          </div>
+          ` : ''}
+
+          <div style="font-size: 12px; color: #666666; border-top: 1px solid #eeeeee; padding-top: 16px; margin-top: 24px;">
+            <p style="margin: 4px 0;">Drivri Logistics Limited | Website: <a href="https://drivri.co.uk" style="color: #00b4d8;">drivri.co.uk</a> | 24/7 Support Line: ${SUPPORT_PHONE}</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const data = JSON.stringify({
+      from: 'Drivri Logistics <info@drivri.co.uk>',
+      to: [customerEmail],
+      subject: `Drivri Instant Quote & Stripe Payment Link - ${serviceName}`,
+      html: htmlContent
+    });
+
+    const req = https.request({
+      hostname: 'api.resend.com',
+      port: 443,
+      path: '/emails',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data)
+      }
+    }, (res) => {
+      let body = '';
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => resolve({ status: res.statusCode, body }));
+    });
+
+    req.on('error', (e) => resolve({ status: 500, error: e.message }));
+    req.write(data);
+    req.end();
+  });
+}
+
 function sendResendEmail(toEmail, subject, htmlContent) {
   return new Promise((resolve) => {
     if (!RESEND_API_KEY) return resolve({ status: 400, error: 'Resend API key missing' });
@@ -161,31 +316,157 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// LEAD ACQUISITION GENERATOR
+// INTELLIGENT CONVERSATIONAL CONCIERGE ENGINE
+// -------------------------------------------------------------
+async function handleHumanConversation(targetJid, incomingText) {
+  const text = incomingText.trim();
+  const lower = text.toLowerCase();
+
+  let profile = customerMemory.get(targetJid) || {
+    stage: 'INTAKE',
+    email: '',
+    vehicleClass: 'small',
+    licenceCategory: 'B',
+    hireHours: 24,
+    hasOwnInsurance: false
+  };
+
+  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (emailMatch) profile.email = emailMatch[0];
+
+  // Parse Vehicle Classes
+  if (lower.includes('luton')) profile.vehicleClass = 'luton';
+  else if (lower.includes('refrigerated')) profile.vehicleClass = 'refrigerated';
+  else if (lower.includes('large') || lower.includes('lwb')) profile.vehicleClass = 'large';
+  else if (lower.includes('medium') || lower.includes('mwb')) profile.vehicleClass = 'medium';
+  else if (lower.includes('small') || lower.includes('swb')) profile.vehicleClass = 'small';
+
+  // Parse Hours
+  if (lower.includes('24') || lower.includes('day') || lower.includes('24hours') || lower.includes('24hrs')) {
+    profile.hireHours = 24;
+  } else {
+    const hoursMatch = text.match(/\b([1-9]|1[0-9]|2[0-4])\s*(?:hours|hrs|hr)\b/i);
+    if (hoursMatch) profile.hireHours = parseInt(hoursMatch[1], 10);
+  }
+
+  customerMemory.set(targetJid, profile);
+
+  // If customer asks for Luton Van / Van Hire Quote:
+  if (lower.includes('luton') || lower.includes('van') || lower.includes('quote') || lower.includes('hire') || lower.includes('rent')) {
+    const vanPricing = PRICING_VAN_RENTAL[profile.vehicleClass] || PRICING_VAN_RENTAL.luton;
+    const insProduct = INSURANCE_PRODUCTS.comprehensive_hire;
+
+    // Daily van rental capped at 8 hrs (£192/day max for Luton)
+    const vanNetGBP = vanPricing.dailyCap8h;
+    const insuranceNetGBP = insProduct.dailyCap; // £28/day cap
+    const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
+    const vatAmountGBP = netSubtotalGBP * 0.20; // 20% UK VAT
+    const totalGrossGBP = netSubtotalGBP + vatAmountGBP; // £264.00
+
+    const standardDepositAmount = 200; // £200.00 Daily Deposit
+    const option1TotalPence = (totalGrossGBP + standardDepositAmount) * 100;
+
+    const zeroDepositFeeGBP = totalGrossGBP * 0.25; // £66.00 Fee
+    const option2TotalPence = (totalGrossGBP + zeroDepositFeeGBP) * 100;
+
+    // Generate Live Stripe Session Links
+    const stripeRes1 = await createStripeCheckoutSession(
+      `${vanPricing.name} Self-Drive (24h Rental) + £${standardDepositAmount} Refundable Deposit`,
+      option1TotalPence,
+      profile.email,
+      'Valued Hirer',
+      `Luton Van 8-hr Daily Cap (£192) + Comprehensive Insurance (£28) + 20% VAT (£44) + £200 Refundable Deposit`
+    );
+    const stripeUrl1 = stripeRes1.success ? stripeRes1.url : 'https://drivri.co.uk/pay';
+
+    const stripeRes2 = await createStripeCheckoutSession(
+      `${vanPricing.name} Self-Drive (24h Rental) + 25% Zero-Deposit Fee`,
+      option2TotalPence,
+      profile.email,
+      'Valued Hirer',
+      `Luton Van 8-hr Daily Cap (£192) + Comprehensive Insurance (£28) + 20% VAT (£44) + £66 Zero-Deposit Waiver Fee`
+    );
+    const stripeUrl2 = stripeRes2.success ? stripeRes2.url : 'https://drivri.co.uk/pay';
+
+    const complyCubeLink = `https://drivri.co.uk/verify-id?session=DRV-${Date.now()}`;
+
+    // Alert Director
+    await sendText(DIRECTOR_PHONE, `🚨 INSTANT QUOTE GENERATED!\n\nVehicle: ${vanPricing.name}\nDuration: 24 Hours\nRental Gross: £${totalGrossGBP.toFixed(2)} (inc 20% VAT)\nOption 1 Total: £${(totalGrossGBP + standardDepositAmount).toFixed(2)}\nOption 2 Total: £${(totalGrossGBP + zeroDepositFeeGBP).toFixed(2)}\n💳 Stripe Option 1: ${stripeUrl1}\n🛡️ Stripe Option 2: ${stripeUrl2}`);
+
+    // If Email provided, send email confirmation
+    if (profile.email) {
+      const bookingSummary = `Luton Van Hire | Duration: 24 Hours | 200 Miles Included Daily (£0.60/mile excess)`;
+      const financialBreakdown = {
+        subtotal: `Luton Van Daily Rate (8-hr cap): £${vanNetGBP.toFixed(2)}`,
+        insurance: `Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}`,
+        vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)} (Gross: £${totalGrossGBP.toFixed(2)})`,
+        depositPolicy: `Standard Refundable Deposit: £${standardDepositAmount}.00`,
+        zeroDepositPolicy: `Zero-Deposit Option: 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)})`,
+        totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit`
+      };
+      await sendBookingConfirmationEmail(profile.email, 'Valued Hirer', `${vanPricing.name} 24h Hire`, bookingSummary, financialBreakdown, null, stripeUrl1, stripeUrl2);
+    }
+
+    let emailAskNotice = profile.email ? `\n\nI've also sent your invoice breakdown to ${profile.email}.` : `\n\nTo receive an official PDF invoice directly to your inbox, please reply with your Email Address!`;
+
+    await sendText(targetJid, `Here is your instant quote for ${vanPricing.name} (24 Hours Rental):\n\n📊 INVOICE & PRICING BREAKDOWN (Inc. 20% UK VAT):\n• Luton Van (8-hr capped daily rate): £${vanNetGBP.toFixed(2)}\n• Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}\n• 20% UK VAT: £${vatAmountGBP.toFixed(2)}\n• Total Gross Rental: £${totalGrossGBP.toFixed(2)}\n• Included Daily Allowance: 200 Miles included (£0.60 per mile on excess miles)\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n\n👉 OPTION 1 (Standard Refundable Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + £${standardDepositAmount} Refundable Deposit:\nPay via Stripe: ${stripeUrl1}\n\n👉 OPTION 2 (Zero Security Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)}):\nPay via Stripe: ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\nComplete your DVLA & ID check to activate vehicle release:\n👉 Verify ID: ${complyCubeLink}${emailAskNotice}\n\nCall line: ${SUPPORT_PHONE}.`);
+    return;
+  }
+
+  // Greeting Fallback
+  await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'd be happy to help you reserve a Luton van or driver! Could you share your email address so I can send your official quote and payment link?`);
+}
+
+// INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE
+async function pollInboundMessages() {
+  try {
+    const res = await requestEvolution(`/chat/findMessages/${INSTANCE}`, 'POST', { page: 1, limit: 15 });
+    if (res.status !== 200 || !res.body || !res.body.messages || !Array.isArray(res.body.messages.records)) return;
+
+    const records = res.body.messages.records;
+
+    if (!isWhatsAppInitialized) {
+      for (const r of records) {
+        if (r.key && r.key.id) answeredMessageIds.add(r.key.id);
+      }
+      isWhatsAppInitialized = true;
+      console.log(`[HUMAN AI CONCIERGE INITIALIZED] Listening for customer chats 24/7...`);
+      return;
+    }
+
+    for (const record of records) {
+      if (!record.key || record.key.fromMe) continue;
+
+      const msgId = record.key.id;
+      if (answeredMessageIds.has(msgId)) continue;
+      
+      answeredMessageIds.add(msgId);
+
+      const targetJid = record.key.remoteJid || record.key.remoteJidAlt || '';
+      if (!targetJid || targetJid.includes('@g.us')) continue;
+
+      let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
+      console.log(`[INCOMING CUSTOMER MESSAGE] JID: ${targetJid} | Text: "${incomingText}"`);
+
+      // Trigger Conversational Concierge Engine
+      await handleHumanConversation(targetJid, incomingText);
+    }
+  } catch (err) {
+    // Silent handling for socket timeouts
+  }
+}
+
+// -------------------------------------------------------------
+// LEAD ACQUISITION GENERATOR & DISPATCH
 // -------------------------------------------------------------
 function generateLeadsFromPrompt(promptText) {
   const leadCatalog = [
-    // Customs Clearance
     { vertical: 'Customs Clearance', company: 'Central Asian Dried Fruit & Spice Importers', contact: 'Farrukh Nazarov', phone: '447958442211', email: 'imports@centralasiandriedfruit.co.uk', text: 'Hi Farrukh! Need UK CDS customs declarations for air cargo or sea containers? Drivri & Globalline (https://drivri.co.uk/freight-customs) handles import entry clearances from £65/entry with instant airport badge release.', subject: 'UK CDS Import Customs Declarations from £65 - Globalline & Drivri' },
     { vertical: 'Customs Clearance', company: 'Pan-African Yam & Agro Merchants', contact: 'Kwabena Addo', phone: '447483334455', email: 'trade@panafricanyam.co.uk', text: 'Hello Kwabena! Need UK customs clearance for air freight arriving at Heathrow? We process CDS entries from £65/declaration.', subject: 'Air Freight CDS Import Clearance - Globalline' },
-    { vertical: 'Customs Clearance', company: 'South American Specialty Coffee Importers', contact: 'Camilo Gomez', phone: '447980556677', email: 'logistics@samcoffeetraders.co.uk', text: 'Hello Camilo! Need GB EORI import declarations? Globalline & Drivri handles CDS declarations from £65.', subject: 'GB EORI Customs Entry Services - Globalline' },
-    { vertical: 'Customs Clearance', company: 'Lombardy Wine & Delicatessen Importers', contact: 'Matteo Conti', phone: '447899667788', email: 'clearance@lombardywine.co.uk', text: 'Hi Matteo! Importing commercial wine or goods via UK ports? We process CDS declarations from £65/entry with fast release.', subject: 'UK Port & Airport Customs Declarations - Globalline' },
-
-    // Self-Drive Van Hire
     { vertical: 'Self-Drive Van Hire', company: 'Soho Event Production & Stage Lighting', contact: 'Dominic Vance', phone: '447711223344', email: 'hire@sohoeventlighting.co.uk', text: 'Hi Dominic! Need self-drive van hire for production gear? Drivri (https://drivri.co.uk/hire) offers SWB (£18/h), MWB (£24/h), LWB (£28/h), Luton (£32/h) & Refrigerated (£42/h) vans with 200 miles included daily!', subject: 'Event Production Van Rentals from £18/hr - Drivri' },
-    { vertical: 'Self-Drive Van Hire', company: 'Borough Market Gourmet Cheese Catering', contact: 'Francesca Bellini', phone: '447860334455', email: 'events@boroughcheesecatering.co.uk', text: 'Hello Francesca! Need a refrigerated van for catering transport? Drivri provides refrigerated vans from £42/hr (capped at £252/day max).', subject: 'Refrigerated Catering Vans from £42/hr - Drivri' },
-
-    // Driver Allocation
     { vertical: 'Driver Allocation', company: 'Hackney Organic Bakery Delivery Fleet', contact: 'Rupert Miller', phone: '447960223344', email: 'fleet@hackneyorganicbakery.co.uk', text: 'Hi Rupert! Need DVLA-vetted drivers for your delivery vans? Drivri (https://drivri.co.uk/book/driver-only) provides Cat B (£25/h), Cat C1 (£32/h), Cat C (£28/h), Cat D1 (£34/h) & Cat C+E (£30/h) drivers.', subject: 'Verified Delivery Driver Allocations - Drivri' },
-    { vertical: 'Driver Allocation', company: 'London City Urgent Medical Express', contact: 'Charlotte Adams', phone: '447483334466', email: 'drivers@londoncityurgentmed.co.uk', text: 'Hello Charlotte! Need short-term driver cover for urgent routes? Drivri provides vetted Cat B drivers from £25/hr.', subject: 'Urgent Route Driver Cover - Drivri' },
-
-    // Van + Driver Crews
     { vertical: 'Van + Driver Crews', company: 'Mayfair Luxury Estate Staging Crews', contact: 'Victoria Westwood', phone: '447838223355', email: 'fitouts@mayfairestatestaging.co.uk', text: 'Hi Victoria! Need a van + driver crew package for interior moves? Drivri (https://drivri.co.uk/hire) provides crew bundles (Van capped at 8 hrs + Driver hourly rate) with 200 miles included daily!', subject: 'Interior Fit-Out Van & Driver Crews - Drivri' },
-
-    // Instant Couriers
     { vertical: 'Instant Couriers', company: 'Shoreditch Fine Art Print Dispatch', contact: 'Jasper Hughes', phone: '447899223366', email: 'shipping@shoreditchartprint.co.uk', text: 'Hi Jasper! Need instant UK shipping for your parcels? Drivri (https://drivri.co.uk/courier) compares live rates across DPD, DHL, UPS & Royal Mail from £2.99.', subject: 'Instant Multi-Carrier Parcel Shipping - Drivri' },
-
-    // Warehousing & Fleet Parking
     { vertical: 'Warehousing & Parking', company: 'Heathrow Airport Pallet Cargo Depot', contact: 'Kwame Boateng', phone: '447860223366', email: 'storage@heathrowpalletdepot.co.uk', text: 'Hi Kwame! Need commercial pallet warehousing or fleet van parking? Drivri (https://drivri.co.uk/warehousing) provides pallet storage from £0.77/day (£5.40/wk) and secure vehicle parking from £2.59/hr.', subject: 'Pallet Warehousing from £0.77/day & Fleet Parking - Drivri' }
   ];
 
@@ -197,9 +478,6 @@ function generateLeadsFromPrompt(promptText) {
   }));
 }
 
-// -------------------------------------------------------------
-// CAMPAIGN DISPATCH ENGINE LOOPS
-// -------------------------------------------------------------
 async function runCampaignDispatches() {
   if (activeCampaign.status !== 'RUNNING') return;
 
@@ -253,9 +531,7 @@ async function runCampaignDispatches() {
   setTimeout(runCampaignDispatches, 60000);
 }
 
-// -------------------------------------------------------------
-// PDF REPORT GENERATOR ENDPOINT
-// -------------------------------------------------------------
+// PDF REPORT GENERATOR
 app.get('/api/download-report-pdf', (req, res) => {
   try {
     const doc = new PDFDocument({ margin: 40 });
@@ -305,9 +581,6 @@ app.get('/api/download-report-pdf', (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// CAMPAIGN CONTROLLER API ENDPOINTS
-// -------------------------------------------------------------
 app.post('/api/generate-and-dispatch-leads', (req, res) => {
   const { prompt } = req.body;
   const promptText = prompt || 'Find 10 fresh leads for each vertical across London and start outreach';
@@ -341,9 +614,7 @@ app.get('/api/campaign-status', (req, res) => {
   res.json(activeCampaign);
 });
 
-// -------------------------------------------------------------
-// FRONTEND DASHBOARD HTML (SERVED ON GET /)
-// -------------------------------------------------------------
+// FRONTEND DASHBOARD HTML
 app.get('/', (req, res) => {
   const html = `
     <!DOCTYPE html>
@@ -380,8 +651,6 @@ app.get('/', (req, res) => {
       </header>
 
       <main class="max-w-7xl mx-auto px-6 mt-8 space-y-8">
-        
-        <!-- Prompt Control Box -->
         <section class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-700">
           <div class="flex items-center space-x-3 mb-4">
             <i class="fa-solid fa-wand-magic-sparkles text-cyan-400 text-xl"></i>
@@ -413,7 +682,6 @@ app.get('/', (req, res) => {
           </form>
         </section>
 
-        <!-- Live Metrics Cards -->
         <section class="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div class="glass-panel rounded-xl p-5 border border-slate-700">
             <div class="text-xs text-slate-400 uppercase font-semibold">Total Leads Found</div>
@@ -437,9 +705,7 @@ app.get('/', (req, res) => {
           </div>
         </section>
 
-        <!-- Leads Data Table & Live Terminal Logs -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
           <div class="lg:col-span-2 glass-panel rounded-2xl p-6 border border-slate-700">
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-lg font-bold text-white flex items-center space-x-2">
@@ -477,7 +743,6 @@ app.get('/', (req, res) => {
               <div class="text-slate-500">[SYSTEM READY] Awaiting prompt execution...</div>
             </div>
           </div>
-
         </div>
 
       </main>
@@ -563,11 +828,12 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-// START EXPRESS SERVER
+// START EXPRESS SERVER & INBOUND CONCIERGE POLLING
 app.listen(PORT, () => {
   console.log("==================================================");
-  console.log(`DRIVRI 24/7 DASHBOARD & CONCIERGE RUNNING ON PORT ${PORT}`);
-  console.log(`Live URL: http://localhost:${PORT}`);
-  console.log("PDF Report Generation Endpoint: /api/download-report-pdf");
+  console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
+  console.log("Intelligent Conversational Quote & Stripe Payment Generator Active");
   console.log("==================================================");
+
+  setInterval(pollInboundMessages, 4000);
 });
