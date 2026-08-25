@@ -30,7 +30,7 @@ const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
 // -------------------------------------------------------------
-// EXPRESS ROUTE HANDLERS (DEFINED BEFORE STATIC MIDDLEWARE)
+// EXPRESS ROUTE HANDLERS
 // -------------------------------------------------------------
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
@@ -380,10 +380,16 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
-  // 1. SIMPLE GREETING HANDLER (INTERACTIVE & NON-PUSHY)
-  if (isSimpleGreeting && !state.service) {
+  // 1. SIMPLE GREETING HANDLER (ALWAYS INTERACTIVE & NON-PUSHY)
+  if (isSimpleGreeting) {
     state.greetingCount++;
     customerMemory.set(targetJid, state);
+
+    if (state.service) {
+      const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
+      await sendText(targetJid, `Hello again! 👋 Great to hear from you.\n\nWere you looking to proceed with your **${state.service === 'CUSTOMS' ? 'UK CDS Customs Clearance' : vanInfo.name}** booking, or did you need assistance with another service today?\n\nFeel free to let me know your pickup date, postcode, or cargo details!`);
+      return;
+    }
 
     if (state.greetingCount > 1) {
       await sendText(targetJid, `Hello again! 👋 I'm right here and ready to help.\n\nWhich service can I guide you with today?\n• **Van Rentals** (Small, Medium, Large, Luton, Refrigerated)\n• **Driver Allocations** (Cat B, C1, C, D1, C+E)\n• **UK CDS Customs Clearance** (£65 fixed fee)\n• **Parcels & Warehousing**\n\nTell me what you need, and I'll guide you step-by-step!`);
@@ -933,7 +939,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Pre-Static Route Registration Enforced");
+  console.log("Guaranteed Simple Greeting Override Enforced");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
