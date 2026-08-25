@@ -100,34 +100,18 @@ const DRIVRI_KNOWLEDGE = {
     'C+E': { name: 'Category C+E Driver (Class 1 Articulated)', hourly: 30 }
   },
 
-  driverCompliance: 'All drivers are DVLA-vetted and operate strictly under UK Working Time Directive (WTD) 9-hr daily limits and EU Tachograph rules.',
-
   customsClearance: {
-    name: 'UK CDS Import Customs Clearance',
+    name: 'UK CDS Import Customs Declaration',
     baseFee: 65.00,
-    vat: 13.00, // 20% VAT
+    vat: 13.00,
     grossFee: 78.00,
     airports: 'London Heathrow (LHR), Gatwick (LGW), Manchester (MAN)',
-    seaPorts: 'Felixstowe, Dover, Southampton',
-    badgeRelease: 'Includes fast airport badge release & EORI clearance.',
-    documentsRequired: 'GB EORI Number, Commercial Invoice, Packing List, MAWB/HAWB.'
+    seaPorts: 'Felixstowe, Dover, Southampton'
   },
-
-  couriers: 'Instant multi-carrier shipping across DPD, DHL, UPS & Royal Mail from £2.99.',
-  warehousing: 'Commercial pallet storage from £0.77/day (£5.40/week per pallet). Secure fleet parking from £2.59/hr.',
 
   insurance: {
-    comprehensive: { name: 'Comprehensive Self-Drive Cover', hourly: 3.50, dailyCap: 28.00 },
-    goodsInTransit: { name: 'Goods in Transit (£10m cover)', hourly: 2.50, dailyCap: 20.00 },
-    hireAndReward: { name: 'Hire & Reward Cover', hourly: 3.00, dailyCap: 25.00 }
-  },
-
-  depositOptions: {
-    option1: 'Option 1: Standard Refundable Security Deposit (£200 daily / £500 weekly).',
-    option2: 'Option 2: 25% Non-Refundable Zero-Deposit Waiver Fee.'
-  },
-
-  hirerCompliance: 'Must be 21+ years old, hold UK/EU licence for 1+ years, provide DVLA Share Code, Proof of Address (utility bill within 90 days), and complete ComplyCube ID check.'
+    comprehensive: { name: 'Comprehensive Self-Drive Cover', hourly: 3.50, dailyCap: 28.00 }
+  }
 };
 
 // EVOLUTION & STRIPE HELPERS
@@ -184,7 +168,7 @@ function sendText(targetJid, text) {
   });
 }
 
-function createStripeCheckoutSession(serviceName, amountPence, customerEmail, customerName, description = null) {
+function createStripeCheckoutSession(serviceName, amountPence, customerEmail, description = null) {
   return new Promise((resolve) => {
     const activeKey = process.env.STRIPE_SECRET_KEY || STRIPE_SECRET_KEY;
     if (!activeKey) return resolve({ success: false, error: 'Stripe key missing', url: `${APP_DOMAIN}/pay` });
@@ -195,7 +179,7 @@ function createStripeCheckoutSession(serviceName, amountPence, customerEmail, cu
       'line_items[0][price_data][currency]': 'gbp',
       'line_items[0][price_data][unit_amount]': Math.round(amountPence),
       'line_items[0][price_data][product_data][name]': serviceName,
-      'line_items[0][price_data][product_data][description]': description || `Drivri Logistics Reservation for ${customerName || 'Valued Customer'} (Includes 20% UK VAT)`,
+      'line_items[0][price_data][product_data][description]': description || `Drivri Logistics Reservation (Includes 20% UK VAT)`,
       'line_items[0][quantity]': '1',
       'customer_email': (customerEmail && customerEmail.includes('@')) ? customerEmail : undefined,
       'success_url': `${APP_DOMAIN}/booking-success?session_id={CHECKOUT_SESSION_ID}`,
@@ -238,7 +222,7 @@ function createStripeCheckoutSession(serviceName, amountPence, customerEmail, cu
   });
 }
 
-function sendBookingConfirmationEmail(customerEmail, customerName, serviceName, bookingDetails, financialBreakdown, complyCubeStatus = null, stripePaymentUrl = null, stripeZeroDepositUrl = null) {
+function sendBookingConfirmationEmail(customerEmail, serviceName, bookingDetails, financialBreakdown, stripePaymentUrl = null, stripeZeroDepositUrl = null) {
   return new Promise((resolve) => {
     const activeResendKey = process.env.RESEND_API_KEY || RESEND_API_KEY;
     if (!activeResendKey) return resolve({ status: 400, error: 'Resend key missing' });
@@ -247,14 +231,14 @@ function sendBookingConfirmationEmail(customerEmail, customerName, serviceName, 
       <div style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
         <div style="background-color: #0d1b2a; color: #ffffff; padding: 24px; text-align: center;">
           <h1 style="margin: 0; font-size: 24px;">Drivri Logistics & Fleet Solutions</h1>
-          <p style="margin: 4px 0 0 0; color: #00b4d8; font-size: 14px;">Official Pro-Forma Invoice & Reservation Summary</p>
+          <p style="margin: 4px 0 0 0; color: #00b4d8; font-size: 14px;">Official Invoice & Reservation Summary</p>
         </div>
         <div style="padding: 24px; color: #333333; line-height: 1.6;">
-          <p>Dear <strong>${customerName}</strong>,</p>
-          <p>Thank you for choosing Drivri! Your official reservation quote for <strong>${serviceName}</strong> is prepared below based on Drivri official rates.</p>
+          <p>Hello,</p>
+          <p>Thank you for choosing Drivri! Your official reservation quote for <strong>${serviceName}</strong> is prepared below.</p>
           
           <div style="background-color: #f8f9fa; border-left: 4px solid #00b4d8; padding: 16px; margin: 20px 0; border-radius: 4px;">
-            <h3 style="margin-top: 0; color: #0d1b2a;">Booking Telemetry & UK Compliance</h3>
+            <h3 style="margin-top: 0; color: #0d1b2a;">Booking Telemetry & Compliance</h3>
             <p style="margin: 4px 0;"><strong>Customer Email:</strong> ${customerEmail}</p>
             <p style="margin: 4px 0;"><strong>Service Category:</strong> ${serviceName}</p>
             <p style="margin: 4px 0;"><strong>Service Details:</strong> ${bookingDetails}</p>
@@ -344,67 +328,71 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// DRIVRI DATA-TRAINED INTERACTIVE CONVERSATIONAL ENGINE
+// STRICT DATA-TRAINED INTERACTIVE ENGINE
 // -------------------------------------------------------------
 async function handleHumanConversation(targetJid, incomingText) {
   const text = incomingText.trim();
   const lower = text.toLowerCase();
 
   let state = customerMemory.get(targetJid) || {
-    turnCount: 0,
-    service: null, // 'CUSTOMS', 'VAN_HIRE', 'DRIVER_HIRE', 'COURIER', 'WAREHOUSE'
+    phase: 'DISCOVERY', // DISCOVERY -> QUOTE_PROPOSAL -> CONFIRMED_PAYMENT
+    service: null, // 'CUSTOMS', 'VAN_HIRE', 'DRIVER_HIRE'
     email: '',
+    emailConfirmed: false,
     postcode: '',
     hireDate: '',
-    vanCategory: 'medium',
-    eoriNumber: ''
+    vanCategory: 'medium'
   };
 
-  state.turnCount++;
-
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) state.email = emailMatch[0];
+  if (emailMatch) {
+    state.email = emailMatch[0];
+  }
 
-  // 1. CUSTOMS CLEARANCE INTENT (custom, clearance, ck3arance, import, export, eori, mawb, air freight)
+  // 1. CUSTOMS CLEARANCE FLOW
   if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
     state.service = 'CUSTOMS';
+
+    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
+      state.phase = 'CONFIRMED_PAYMENT';
+    } else if (state.phase === 'DISCOVERY') {
+      state.phase = 'QUOTE_PROPOSAL';
+    }
     customerMemory.set(targetJid, state);
 
-    // If customer asks to book/pay or provides email, close the deal!
-    if (lower.includes('book') || lower.includes('pay') || lower.includes('link') || lower.includes('proceed') || lower.includes('yes') || (state.email && state.turnCount > 1)) {
-      const netGBP = DRIVRI_KNOWLEDGE.customsClearance.baseFee; // £65.00
-      const vatGBP = DRIVRI_KNOWLEDGE.customsClearance.vat; // £13.00
-      const totalGBP = DRIVRI_KNOWLEDGE.customsClearance.grossFee; // £78.00
+    if (state.phase === 'QUOTE_PROPOSAL') {
+      await sendText(targetJid, `Hello! Welcome to Drivri & Globalline Customs. I'm your UK Customs Compliance Specialist. 🛃\n\nI'd be glad to help clear your UK CDS import/export declaration for London Heathrow (LHR), Gatwick, Manchester, or UK sea ports.\n\nTo tailor your clearance accurately, could you confirm:\n1. Is your cargo arriving via Air Freight or Sea Container?\n2. Do you have a registered GB EORI Number?\n3. What is your preferred email address for invoice dispatch?\n\nOur Drivri official fixed clearance fee is **£65.00 + 20% VAT (£78.00 Gross)** including fast airport badge release!`);
+      return;
+    }
+
+    if (state.phase === 'CONFIRMED_PAYMENT') {
+      const totalGBP = DRIVRI_KNOWLEDGE.customsClearance.grossFee;
 
       const stripeRes = await createStripeCheckoutSession(
         'UK CDS Import Customs Declaration',
         totalGBP * 100,
         state.email,
-        'Valued Importer',
-        'UK CDS Entry Clearance Declaration + Heathrow/Airport Badge Release (£65.00 + 20% VAT)'
+        'UK CDS Entry Clearance Declaration + Airport Badge Release (£65.00 + 20% VAT)'
       );
       const stripeUrl = stripeRes.url || `${APP_DOMAIN}/pay`;
 
-      await sendText(DIRECTOR_PHONE, `🚨 CUSTOMS CLEARANCE BOOKING CLOSED!\n\nCustomer: ${targetJid}\nText: "${incomingText}"\nEmail: ${state.email || 'Pending'}\nPay URL: ${stripeUrl}`);
+      await sendText(DIRECTOR_PHONE, `🚨 CUSTOMS CLEARANCE DEAL CLOSED!\n\nCustomer: ${targetJid}\nText: "${incomingText}"\nEmail: ${state.email || 'Pending'}\nPay URL: ${stripeUrl}`);
 
-      if (state.email) {
+      if (state.email && (lower.includes('yes') || lower.includes('send') || lower.includes('confirm') || state.emailConfirmed)) {
+        state.emailConfirmed = true;
         const summary = 'UK CDS Import Customs Entry Declaration (Air Freight & Sea Ports)';
         const financial = { subtotal: 'CDS Import Entry Fee: £65.00', vat: '20% UK VAT: £13.00', totalAmount: '£78.00 GBP' };
-        await sendBookingConfirmationEmail(state.email, 'Valued Importer', 'UK CDS Customs Clearance', summary, financial, null, stripeUrl);
+        await sendBookingConfirmationEmail(state.email, 'UK CDS Customs Clearance', summary, financial, stripeUrl);
       }
 
-      let emailNotice = state.email ? `\n\nI've dispatched your official Drivri pro-forma invoice to ${state.email}.` : `\n\nTo receive an official pro-forma PDF receipt to your inbox, please reply with your Email Address!`;
+      let emailNotice = (state.email && state.emailConfirmed) ? `\n\nI've dispatched your official pro-forma invoice to ${state.email}.` : (state.email ? `\n\nWould you like me to send your official PDF invoice to **${state.email}**?` : `\n\nReply with your email address to receive your PDF receipt!`);
 
-      await sendText(targetJid, `Excellent! Everything is locked in for your Drivri UK CDS Customs Clearance. 🛃\n\n📊 DRIVRI OFFICIAL ENTRY BREAKDOWN (Inc. 20% UK VAT):\n• UK CDS Declaration Entry: £65.00\n• 20% UK VAT: £13.00\n• Total Amount Payable: £78.00 GBP\n• Included: Fast Airport Badge Release (Heathrow/Gatwick/Sea Ports) & EORI Validation\n\n💳 SECURE STRIPE RESERVATION LINK:\n👉 Complete Reservation: ${stripeUrl}${emailNotice}\n\nWhenever you're ready, feel free to attach your Commercial Invoice, Packing List, or MAWB PDF directly here in chat to initiate immediate release!`);
+      await sendText(targetJid, `Excellent! Everything is set for your Drivri UK CDS Customs Clearance. 🛃\n\n📊 DRIVRI OFFICIAL ENTRY BREAKDOWN (Inc. 20% UK VAT):\n• UK CDS Declaration Entry: £65.00\n• 20% UK VAT: £13.00\n• Total Amount Payable: £78.00 GBP\n• Included: Fast Airport Badge Release & EORI Clearance\n\n💳 SECURE STRIPE RESERVATION LINK:\n👉 Complete Reservation: ${stripeUrl}${emailNotice}\n\nFeel free to attach your Commercial Invoice or MAWB PDF here in chat to start instant clearance!`);
       return;
     }
-
-    // Consultative Intake Conversation
-    await sendText(targetJid, `Hello! Welcome to Drivri & Globalline Customs. I'm your UK Customs Compliance Specialist. 🛃\n\nI'd be glad to guide you through your UK CDS import/export clearance for London Heathrow (LHR), Gatwick, Manchester, or UK sea ports.\n\nTo ensure your cargo releases smoothly without customs holds, could you share:\n1. Is your shipment arriving via Air Freight or Sea Container?\n2. Do you have a GB EORI Number registered for your business?\n3. Do you have your Commercial Invoice & Packing List ready?\n\nOur Drivri official fixed entry fee is **£65.00 + 20% VAT (£78.00 Gross)** including instant airport badge release!`);
-    return;
   }
 
-  // 2. VAN HIRE INTENT (van, luton, swb, mwb, lwb, refrigerated, hire, rent)
+  // 2. VAN HIRE FLOW (Medium, Luton, Small, Large, Refrigerated)
   if (lower.includes('van') || lower.includes('luton') || lower.includes('medium') || lower.includes('small') || lower.includes('large') || lower.includes('refrigerated') || lower.includes('hire') || lower.includes('rent')) {
     state.service = 'VAN_HIRE';
     if (lower.includes('medium') || lower.includes('mwb')) state.vanCategory = 'medium';
@@ -413,12 +401,23 @@ async function handleHumanConversation(targetJid, incomingText) {
     else if (lower.includes('small') || lower.includes('swb')) state.vanCategory = 'small';
     else if (lower.includes('refrigerated')) state.vanCategory = 'refrigerated';
 
+    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
+      state.phase = 'CONFIRMED_PAYMENT';
+    } else if (state.phase === 'DISCOVERY') {
+      state.phase = 'QUOTE_PROPOSAL';
+    }
     customerMemory.set(targetJid, state);
 
     const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
 
-    // If customer explicitly asks to book/pay or provides email after initial conversation, close the deal!
-    if (lower.includes('book') || lower.includes('pay') || lower.includes('link') || lower.includes('proceed') || lower.includes('yes') || (state.email && state.turnCount > 1)) {
+    // PHASE 1: DISCOVERY & INFORMATION COLLECTION (BEFORE QUOTE & PAYMENT LINKS)
+    if (state.phase === 'QUOTE_PROPOSAL' && !lower.includes('ready') && !lower.includes('book') && !lower.includes('pay')) {
+      await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'm your UK Van Hire & Fleet Advisor. 🚛\n\nI'd be glad to help organize your **${vanInfo.name}** (Payload: ${vanInfo.payload}, Volume: ${vanInfo.volume})!\n\nTo tailor your exact booking details before we generate your quote:\n1. What date and pickup location/postcode do you require for hire?\n2. What is your expected hire duration?\n3. Do you have a UK/EU Driving Licence held for 1+ years (Minimum age 21+)?\n\n*(Note: All Drivri self-drive hires include 200 Miles daily, 8-hr daily rate capping, and comprehensive insurance cover).*`);
+      return;
+    }
+
+    // PHASE 2: CONFIRMED PAYMENT & QUOTE (ONLY UPON CUSTOMER REQUEST)
+    if (state.phase === 'CONFIRMED_PAYMENT' || lower.includes('ready') || lower.includes('book') || lower.includes('pay')) {
       const vanNetGBP = vanInfo.dailyCap8h;
       const insuranceNetGBP = DRIVRI_KNOWLEDGE.insurance.comprehensive.dailyCap; // £28.00
       const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
@@ -434,7 +433,6 @@ async function handleHumanConversation(targetJid, incomingText) {
         `${vanInfo.name} Self-Drive (24h Rental) + £${standardDepositAmount} Refundable Deposit`,
         option1TotalPence,
         state.email,
-        'Valued Hirer',
         `${vanInfo.name} 8-hr Daily Cap (£${vanNetGBP}) + Comprehensive Insurance (£28) + 20% VAT (£${vatAmountGBP.toFixed(2)}) + £200 Deposit`
       );
       const stripeUrl1 = stripeRes1.url || `${APP_DOMAIN}/pay`;
@@ -443,7 +441,6 @@ async function handleHumanConversation(targetJid, incomingText) {
         `${vanInfo.name} Self-Drive (24h Rental) + 25% Zero-Deposit Fee`,
         option2TotalPence,
         state.email,
-        'Valued Hirer',
         `${vanInfo.name} 8-hr Daily Cap (£${vanNetGBP}) + Comprehensive Insurance (£28) + 20% VAT (£${vatAmountGBP.toFixed(2)}) + £${zeroDepositFeeGBP.toFixed(2)} Zero-Deposit Fee`
       );
       const stripeUrl2 = stripeRes2.url || `${APP_DOMAIN}/pay`;
@@ -452,7 +449,9 @@ async function handleHumanConversation(targetJid, incomingText) {
 
       await sendText(DIRECTOR_PHONE, `🚨 DRIVRI VAN HIRE BOOKING CLOSED!\n\nVehicle: ${vanInfo.name}\nCustomer: ${targetJid}\nGross Rental: £${totalGrossGBP.toFixed(2)}\nOption 1: ${stripeUrl1}\nOption 2: ${stripeUrl2}`);
 
-      if (state.email) {
+      // CONFIRM EMAIL BEFORE SENDING EMAIL
+      if (state.email && (lower.includes('yes') || lower.includes('send') || lower.includes('confirm') || state.emailConfirmed)) {
+        state.emailConfirmed = true;
         const bookingSummary = `${vanInfo.name} Hire | 24 Hours Rental | 200 Miles Included Daily (£0.60/mile excess)`;
         const financialBreakdown = {
           subtotal: `${vanInfo.name} Daily Rate (8-hr cap): £${vanNetGBP.toFixed(2)}`,
@@ -462,83 +461,48 @@ async function handleHumanConversation(targetJid, incomingText) {
           zeroDepositPolicy: `Zero-Deposit Option: 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)})`,
           totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit`
         };
-        await sendBookingConfirmationEmail(state.email, 'Valued Hirer', `${vanInfo.name} 24h Hire`, bookingSummary, financialBreakdown, null, stripeUrl1, stripeUrl2);
+        await sendBookingConfirmationEmail(state.email, `${vanInfo.name} 24h Hire`, bookingSummary, financialBreakdown, stripeUrl1, stripeUrl2);
       }
 
-      let emailNotice = state.email ? `\n\nI've sent your official Drivri pro-forma invoice to ${state.email}.` : `\n\nTo receive an official PDF invoice directly to your inbox, please reply with your Email Address!`;
+      let emailNotice = (state.email && state.emailConfirmed) ? `\n\nI've dispatched your official pro-forma invoice to ${state.email}.` : (state.email ? `\n\nWould you like me to send your official invoice breakdown to **${state.email}**?` : `\n\nReply with your email address if you'd like your PDF invoice sent to your inbox!`);
 
-      await sendText(targetJid, `Perfect! Here is your official itemized reservation breakdown for ${vanInfo.name} (24 Hours Rental):\n\n📊 DRIVRI OFFICIAL PRICING BREAKDOWN (Inc. 20% UK VAT):\n• ${vanInfo.name} (8-hr capped daily rate): £${vanNetGBP.toFixed(2)}\n• Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}\n• 20% UK VAT: £${vatAmountGBP.toFixed(2)}\n• Gross Total Rental: £${totalGrossGBP.toFixed(2)}\n• Included Allowance: 200 Miles Daily (£0.60/mile on excess miles)\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n\n👉 OPTION 1 (Standard Refundable Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + £${standardDepositAmount} Refundable Deposit:\nPay via Stripe: ${stripeUrl1}\n\n👉 OPTION 2 (Zero Security Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)}):\nPay via Stripe: ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\nComplete your DVLA & ID check to activate vehicle release:\n👉 Verify ID: ${complyCubeLink}${emailNotice}\n\nCall line: ${SUPPORT_PHONE}.`);
+      // FIXED LINE ITEM NAME: Matches headline vehicle class (e.g. Medium Van (MWB))
+      await sendText(targetJid, `Here is your official itemized quote for ${vanInfo.name} (24 Hours Rental):\n\n📊 DRIVRI OFFICIAL BREAKDOWN (Inc. 20% UK VAT):\n• ${vanInfo.name} (8-hr capped daily rate): £${vanNetGBP.toFixed(2)}\n• Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}\n• 20% UK VAT: £${vatAmountGBP.toFixed(2)}\n• Total Gross Rental: £${totalGrossGBP.toFixed(2)}\n• Included Allowance: 200 Miles Daily (£0.60/mile on excess miles)\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n\n👉 OPTION 1 (Standard Refundable Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + £${standardDepositAmount} Refundable Deposit:\nPay via Stripe: ${stripeUrl1}\n\n👉 OPTION 2 (Zero Security Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)}):\nPay via Stripe: ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\nComplete your DVLA & ID check to activate vehicle release:\n👉 Verify ID: ${complyCubeLink}${emailNotice}\n\nCall line: ${SUPPORT_PHONE}.`);
       return;
     }
-
-    // Consultative Discovery Response
-    await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'm your UK Van Hire & Fleet Advisor. 🚛\n\nI'd be glad to help you organize your ${vanInfo.name} (Payload: ${vanInfo.payload}, Volume: ${vanInfo.volume})!\n\n📋 DRIVRI OFFICIAL HIRER GUIDANCE:\n• **Daily Rate Cap:** Capped at 8 hours max per 24h period (£${vanInfo.dailyCap8h}.00/day)\n• **Included Mileage:** 200 Miles included daily (£0.60/mile excess)\n• **UK Hirer Rules:** Age 21+, UK/EU Licence held for 1+ years, DVLA Share Code & Proof of Address.\n• **Security Deposits:** Option 1 (£200 Refundable Deposit) OR Option 2 (25% Zero-Deposit Waiver Fee).\n\nTo check exact vehicle availability for your booking, what date and pickup location/postcode do you require?`);
-    return;
   }
 
-  // 3. DRIVER HIRE INTENT (driver, cat b, cat c1, cat c, hgv)
-  if (lower.includes('driver') || lower.includes('cat b') || lower.includes('cat c') || lower.includes('hgv')) {
-    state.service = 'DRIVER_HIRE';
-    customerMemory.set(targetJid, state);
+  // 3. EMAIL CONFIRMATION & DISPATCH HANDLER
+  if (emailMatch) {
+    if (lower.includes('yes') || lower.includes('send') || lower.includes('confirm') || lower.includes('ok')) {
+      state.emailConfirmed = true;
+      customerMemory.set(targetJid, state);
 
-    await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'm your Professional Driver Allocation Specialist. 👨‍✈️\n\nWe supply DVLA-vetted, experienced commercial drivers across the UK based on Drivri official hourly rates:\n• **Category B (Vans up to 3.5t):** £25.00/hour\n• **Category C1 (3.5t–7.5t Goods):** £32.00/hour\n• **Category C (Class 2 HGV over 7.5t):** £28.00/hour\n• **Category D1 (Minibus Passengers):** £34.00/hour\n• **Category C+E (Class 1 Articulated):** £30.00/hour\n\nAll rates include 20% UK VAT. Our drivers operate strictly under UK Working Time Directive (WTD) 9-hr daily limits and EU Tachograph rules.\n\nWhich licence category and date do you require for your driver allocation?`);
-    return;
-  }
+      const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
+      const vanNetGBP = vanInfo.dailyCap8h;
+      const insuranceNetGBP = 28.00;
+      const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
+      const vatAmountGBP = netSubtotalGBP * DRIVRI_KNOWLEDGE.vatRate;
+      const totalGrossGBP = netSubtotalGBP + vatAmountGBP;
 
-  // 4. EMAIL SUBMISSION HANDLER
-  if (emailMatch && text.length < 50) {
-    const activeEmail = state.email;
-
-    if (state.service === 'CUSTOMS') {
-      const stripeRes = await createStripeCheckoutSession(
-        'UK CDS Import Customs Declaration',
-        7800,
-        activeEmail,
-        'Valued Importer'
+      const standardDepositAmount = 200;
+      const stripeRes1 = await createStripeCheckoutSession(
+        `${vanInfo.name} Self-Drive (24h Rental) + £${standardDepositAmount} Deposit`,
+        (totalGrossGBP + standardDepositAmount) * 100,
+        state.email
       );
-      const stripeUrl = stripeRes.url || `${APP_DOMAIN}/pay`;
 
-      await sendBookingConfirmationEmail(activeEmail, 'Valued Importer', 'UK CDS Customs Clearance', 'UK CDS Import Customs Declaration (Air Freight & Sea Ports)', { subtotal: 'CDS Entry Fee: £65.00', vat: '20% UK VAT: £13.00', totalAmount: '£78.00 GBP' }, null, stripeUrl);
+      await sendBookingConfirmationEmail(state.email, `${vanInfo.name} 24h Hire`, `${vanInfo.name} Hire | 24 Hours Rental | 200 Miles Included Daily`, { subtotal: `${vanInfo.name} Daily Rate: £${vanNetGBP.toFixed(2)}`, insurance: `Comprehensive Cover: £${insuranceNetGBP.toFixed(2)}`, vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)}`, totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit` }, stripeRes1.url || `${APP_DOMAIN}/pay`);
 
-      await sendText(targetJid, `Thank you! I've sent your official UK CDS Customs Clearance invoice to ${activeEmail}! 📧\n\n💳 IN-CHAT STRIPE PAYMENT LINK:\n👉 Pay via Stripe (£78.00 Gross): ${stripeUrl}\n\nWhenever you're ready, feel free to send over your Commercial Invoice or MAWB PDF here in chat to proceed!`);
+      await sendText(targetJid, `Confirmed! I've sent your official pro-forma invoice to **${state.email}**! 📧\n\nNeed any adjustments or extra driver hours? Feel free to reply here anytime!`);
+      return;
+    } else {
+      await sendText(targetJid, `Got it! I've recorded your email as **${state.email}**. Shall I send your official pro-forma invoice and Stripe payment links to this email address?`);
       return;
     }
-
-    const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
-    const vanNetGBP = vanInfo.dailyCap8h;
-    const insuranceNetGBP = 28.00;
-    const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
-    const vatAmountGBP = netSubtotalGBP * DRIVRI_KNOWLEDGE.vatRate;
-    const totalGrossGBP = netSubtotalGBP + vatAmountGBP;
-
-    const standardDepositAmount = 200;
-    const option1TotalPence = (totalGrossGBP + standardDepositAmount) * 100;
-    const zeroDepositFeeGBP = totalGrossGBP * 0.25;
-    const option2TotalPence = (totalGrossGBP + zeroDepositFeeGBP) * 100;
-
-    const stripeRes1 = await createStripeCheckoutSession(
-      `${vanInfo.name} Self-Drive (24h Rental) + £${standardDepositAmount} Deposit`,
-      option1TotalPence,
-      activeEmail,
-      'Valued Hirer'
-    );
-    const stripeUrl1 = stripeRes1.url || `${APP_DOMAIN}/pay`;
-
-    const stripeRes2 = await createStripeCheckoutSession(
-      `${vanInfo.name} Self-Drive (24h Rental) + 25% Zero-Deposit Fee`,
-      option2TotalPence,
-      activeEmail,
-      'Valued Hirer'
-    );
-    const stripeUrl2 = stripeRes2.url || `${APP_DOMAIN}/pay`;
-
-    await sendBookingConfirmationEmail(activeEmail, 'Valued Hirer', `${vanInfo.name} 24h Hire`, `${vanInfo.name} Hire | 24 Hours Rental | 200 Miles Included Daily`, { subtotal: `${vanInfo.name} Daily Rate (8-hr cap): £${vanNetGBP.toFixed(2)}`, insurance: `Comprehensive Cover: £${insuranceNetGBP.toFixed(2)}`, vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)}`, depositPolicy: `Standard Deposit: £200.00`, zeroDepositPolicy: `Zero-Deposit Option: £${zeroDepositFeeGBP.toFixed(2)}`, totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit` }, null, stripeUrl1, stripeUrl2);
-
-    await sendText(targetJid, `Thank you! I've sent your official Drivri pro-forma invoice and Stripe payment links to ${activeEmail}! 📧\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n👉 Option 1 (Standard Deposit £${standardDepositAmount}): ${stripeUrl1}\n👉 Option 2 (Zero Deposit Waiver Fee £${zeroDepositFeeGBP.toFixed(2)}): ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\n👉 Complete ID Check: ${APP_DOMAIN}/verify-id?session=DRV-${Date.now()}\n\nNeed any adjustments or extra driver hours? Just reply here!`);
-    return;
   }
 
-  // 5. DEFAULT DRIVRI CONSULTATIVE GREETING FALLBACK
+  // 4. DEFAULT CONSULTATIVE GREETING FALLBACK
   await sendText(targetJid, `Hello! Welcome to Drivri Logistics & Globalline Customs. I'm your 24/7 Fleet & Compliance Advisor. 👋\n\nHow can I guide you today with our official UK services?\n• **Self-Drive Van Rentals** (SWB £108/d, MWB £144/d, LWB £168/d, Luton £192/d, Refrigerated £252/d)\n• **Verified Driver Allocations** (Cat B £25/h, Cat C1 £32/h, Cat C £28/h, Cat D1 £34/h, Cat C+E £30/h)\n• **UK CDS Customs Clearance** (£65.00 entry fee + VAT for LHR/LGW & UK ports)\n• **Multi-Carrier Parcel Couriers & Pallet Warehousing**\n\nTell me a bit about your requirement, and I'll guide you through our exact UK compliance and official rates!`);
 }
 
@@ -1074,7 +1038,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Drivri Official Data Trained & Consultative Closing Engine Active");
+  console.log("Strict Data-Trained & Email-Confirmed Closing Engine Active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
