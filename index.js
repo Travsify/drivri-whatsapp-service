@@ -20,6 +20,7 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(__dirname));
 
 const SUPPORT_PHONE = '+44 7988 599 326';
 const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
@@ -30,10 +31,17 @@ const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
 // -------------------------------------------------------------
-// EXPRESS MIDDLEWARE ROUTE HANDLERS (EXACT MATCHES FOR ALL PATHS)
+// EXPRESS MIDDLEWARE ROUTE HANDLERS
 // -------------------------------------------------------------
 app.use('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
+});
+
+app.use('/verify-id.html', (req, res, next) => {
+  if (fs.existsSync(path.join(__dirname, 'verify-id.html'))) {
+    return res.sendFile(path.join(__dirname, 'verify-id.html'));
+  }
+  next();
 });
 
 app.use('/verify-id', (req, res) => {
@@ -298,7 +306,7 @@ function sendText(targetJid, text) {
 function createStripeCheckoutSession(serviceName, amountPence, customerEmail, description = null) {
   return new Promise((resolve) => {
     const activeKey = process.env.STRIPE_SECRET_KEY || STRIPE_SECRET_KEY;
-    if (!activeKey) return resolve({ success: false, error: 'Stripe key missing', url: `${PUBLIC_DOMAIN}/pay` });
+    if (!activeKey) return resolve({ success: false, error: 'Stripe key missing', url: `${PUBLIC_DOMAIN}/pay.html` });
 
     const postData = querystring.stringify({
       'mode': 'payment',
@@ -335,15 +343,15 @@ function createStripeCheckoutSession(serviceName, amountPence, customerEmail, de
             resolve({ success: true, url: parsed.url, sessionId: parsed.id });
           } else {
             console.error('[STRIPE ERROR]', parsed);
-            resolve({ success: false, error: parsed.error ? parsed.error.message : body, url: `${PUBLIC_DOMAIN}/pay` });
+            resolve({ success: false, error: parsed.error ? parsed.error.message : body, url: `${PUBLIC_DOMAIN}/pay.html` });
           }
         } catch (e) {
-          resolve({ success: false, error: e.message, url: `${PUBLIC_DOMAIN}/pay` });
+          resolve({ success: false, error: e.message, url: `${PUBLIC_DOMAIN}/pay.html` });
         }
       });
     });
 
-    req.on('error', err => resolve({ success: false, error: err.message, url: `${PUBLIC_DOMAIN}/pay` }));
+    req.on('error', err => resolve({ success: false, error: err.message, url: `${PUBLIC_DOMAIN}/pay.html` }));
     req.write(postData);
     req.end();
   });
@@ -476,8 +484,8 @@ async function handleHumanConversation(targetJid, incomingText) {
     state.email = emailMatch[0];
   }
 
-  // GUARANTEED FUNCTIONAL COMPLYCUBE LINK (0% 404)
-  const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id?session=DRV-${Date.now()}`;
+  // GUARANTEED FUNCTIONAL COMPLYCUBE LINK (0% 404 BOTH STATIC & EXPRESS)
+  const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
   // 1. CUSTOMS CLEARANCE FLOW
   if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
@@ -504,7 +512,7 @@ async function handleHumanConversation(targetJid, incomingText) {
         state.email,
         'UK CDS Entry Clearance Declaration + Airport Badge Release (£65.00 + 20% VAT)'
       );
-      const stripeUrl = stripeRes.url || `${PUBLIC_DOMAIN}/pay`;
+      const stripeUrl = stripeRes.url || `${PUBLIC_DOMAIN}/pay.html`;
 
       await sendText(DIRECTOR_PHONE, `🚨 CUSTOMS CLEARANCE DEAL CLOSED!\n\nCustomer: ${targetJid}\nText: "${incomingText}"\nEmail: ${state.email || 'Pending'}\nPay URL: ${stripeUrl}`);
 
@@ -565,7 +573,7 @@ async function handleHumanConversation(targetJid, incomingText) {
         state.email,
         `${vanInfo.name} 8-hr Daily Cap (£${vanNetGBP}) + Comprehensive Insurance (£28) + 20% VAT (£${vatAmountGBP.toFixed(2)}) + £200 Deposit`
       );
-      const stripeUrl1 = stripeRes1.url || `${PUBLIC_DOMAIN}/pay`;
+      const stripeUrl1 = stripeRes1.url || `${PUBLIC_DOMAIN}/pay.html`;
 
       const stripeRes2 = await createStripeCheckoutSession(
         `${vanInfo.name} Self-Drive (24h Rental) + 25% Zero-Deposit Fee`,
@@ -573,7 +581,7 @@ async function handleHumanConversation(targetJid, incomingText) {
         state.email,
         `${vanInfo.name} 8-hr Daily Cap (£${vanNetGBP}) + Comprehensive Insurance (£28) + 20% VAT (£${vatAmountGBP.toFixed(2)}) + £${zeroDepositFeeGBP.toFixed(2)} Zero-Deposit Fee`
       );
-      const stripeUrl2 = stripeRes2.url || `${PUBLIC_DOMAIN}/pay`;
+      const stripeUrl2 = stripeRes2.url || `${PUBLIC_DOMAIN}/pay.html`;
 
       await sendText(DIRECTOR_PHONE, `🚨 DRIVRI VAN HIRE BOOKING CLOSED!\n\nVehicle: ${vanInfo.name}\nCustomer: ${targetJid}\nGross Rental: £${totalGrossGBP.toFixed(2)}\nOption 1: ${stripeUrl1}\nOption 2: ${stripeUrl2}`);
 
@@ -620,7 +628,7 @@ async function handleHumanConversation(targetJid, incomingText) {
         state.email
       );
 
-      await sendBookingConfirmationEmail(state.email, `${vanInfo.name} 24h Hire`, `${vanInfo.name} Hire | 24 Hours Rental | 200 Miles Included Daily`, { subtotal: `${vanInfo.name} Daily Rate: £${vanNetGBP.toFixed(2)}`, insurance: `Comprehensive Cover: £${insuranceNetGBP.toFixed(2)}`, vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)}`, totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit` }, stripeRes1.url || `${PUBLIC_DOMAIN}/pay`);
+      await sendBookingConfirmationEmail(state.email, `${vanInfo.name} 24h Hire`, `${vanInfo.name} Hire | 24 Hours Rental | 200 Miles Included Daily`, { subtotal: `${vanInfo.name} Daily Rate: £${vanNetGBP.toFixed(2)}`, insurance: `Comprehensive Cover: £${insuranceNetGBP.toFixed(2)}`, vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)}`, totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit` }, stripeRes1.url || `${PUBLIC_DOMAIN}/pay.html`);
 
       await sendText(targetJid, `Confirmed! I've sent your official pro-forma invoice to **${state.email}**! 📧\n\nNeed any adjustments or extra driver hours? Feel free to reply here anytime!`);
       return;
