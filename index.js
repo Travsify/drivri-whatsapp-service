@@ -31,22 +31,27 @@ const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
 // -------------------------------------------------------------
-// EXPRESS ROUTE & WEBHOOK HANDLERS
+// EXPRESS ROUTE & WEBHOOK HANDLERS (EXACT GET/POST ENFORCEMENT)
 // -------------------------------------------------------------
-app.use('/health', (req, res) => {
+app.get('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
 });
 
-app.use('/verify-id.html', (req, res, next) => {
+app.get('/verify-id.html', (req, res) => {
   if (fs.existsSync(path.join(__dirname, 'verify-id.html'))) {
     return res.sendFile(path.join(__dirname, 'verify-id.html'));
   }
-  next();
+  const session = req.query.session || `DRV-${Date.now()}`;
+  res.status(200).send(getVerifyIdHtml(session));
 });
 
-app.use('/verify-id', (req, res) => {
+app.get('/verify-id', (req, res) => {
   const session = req.query.session || `DRV-${Date.now()}`;
-  res.status(200).send(`
+  res.status(200).send(getVerifyIdHtml(session));
+});
+
+function getVerifyIdHtml(session) {
+  return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -77,18 +82,22 @@ app.use('/verify-id', (req, res) => {
       </div>
     </body>
     </html>
-  `);
-});
+  `;
+}
 
-app.use('/pay.html', (req, res, next) => {
+app.get('/pay.html', (req, res) => {
   if (fs.existsSync(path.join(__dirname, 'pay.html'))) {
     return res.sendFile(path.join(__dirname, 'pay.html'));
   }
-  next();
+  res.status(200).send(getPayHtml());
 });
 
-app.use('/pay', (req, res) => {
-  res.status(200).send(`
+app.get('/pay', (req, res) => {
+  res.status(200).send(getPayHtml());
+});
+
+function getPayHtml() {
+  return `
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -113,8 +122,8 @@ app.use('/pay', (req, res) => {
       </div>
     </body>
     </html>
-  `);
-});
+  `;
+}
 
 // Live Credentials
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
@@ -475,7 +484,6 @@ app.all('/webhook/whatsapp*', async (req, res) => {
     const body = req.body;
     if (!body) return;
     
-    // Support various Evolution API webhook event names
     const eventName = body.event || body.type || '';
     if (!eventName.toLowerCase().includes('message')) return;
 
@@ -630,7 +638,7 @@ async function runCampaignDispatches() {
 }
 
 // PDF REPORT GENERATOR
-app.use('/api/download-report-pdf', (req, res) => {
+app.get('/api/download-report-pdf', (req, res) => {
   try {
     if (!PDFDocument) {
       return res.status(500).send('PDF generation requires pdfkit module');
@@ -702,7 +710,7 @@ app.post('/api/generate-and-dispatch-leads', (req, res) => {
   });
 });
 
-app.use('/api/campaign-status', (req, res) => {
+app.get('/api/campaign-status', (req, res) => {
   res.json(activeCampaign);
 });
 
@@ -924,7 +932,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Instant Webhook & Polling Active on Render");
+  console.log("Instant Webhook & GET Route Enforcers Active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
