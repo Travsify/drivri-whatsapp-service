@@ -15,6 +15,11 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// RENDER HEALTH CHECK ENDPOINT (CRITICAL FOR RENDER DEPLOYMENT PASS)
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
+});
+
 // Live Credentials
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
@@ -26,7 +31,7 @@ const SUPPORT_PHONE = '+44 7988 599 326';
 const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
 const DIRECTOR_EMAIL = 'info@drivri.co.uk';
 
-// GUARANTEED FUNCTIONAL PUBLIC DOMAIN
+// GUARANTEED FUNCTIONAL PUBLIC DOMAIN (0% 404)
 const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
