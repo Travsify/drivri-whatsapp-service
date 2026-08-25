@@ -20,7 +20,6 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(__dirname));
 
 const SUPPORT_PHONE = '+44 7988 599 326';
 const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
@@ -31,7 +30,7 @@ const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
 // -------------------------------------------------------------
-// EXPRESS ROUTE & WEBHOOK HANDLERS (EXACT GET/POST ENFORCEMENT)
+// EXPRESS ROUTE HANDLERS (DEFINED BEFORE STATIC MIDDLEWARE)
 // -------------------------------------------------------------
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
@@ -124,6 +123,8 @@ function getPayHtml() {
     </html>
   `;
 }
+
+app.use(express.static(__dirname));
 
 // Live Credentials
 const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
@@ -932,7 +933,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Instant Webhook & GET Route Enforcers Active");
+  console.log("Pre-Static Route Registration Enforced");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
