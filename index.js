@@ -351,7 +351,8 @@ async function handleHumanConversation(targetJid, incomingText) {
   const lower = text.toLowerCase();
 
   let state = customerMemory.get(targetJid) || {
-    phase: 'DISCOVERY',
+    phase: 'GREETED',
+    greetingCount: 0,
     service: null,
     email: '',
     emailConfirmed: false,
@@ -360,6 +361,8 @@ async function handleHumanConversation(targetJid, incomingText) {
     vanCategory: 'medium'
   };
 
+  const isSimpleGreeting = lower === 'hi' || lower === 'hello' || lower === 'hey' || lower === 'good morning' || lower === 'good afternoon' || lower === 'hi there';
+
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
   if (emailMatch) {
     state.email = emailMatch[0];
@@ -367,12 +370,27 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
+  // 1. SIMPLE GREETING HANDLER (INTERACTIVE & NON-PUSHY)
+  if (isSimpleGreeting && !state.service) {
+    state.greetingCount++;
+    customerMemory.set(targetJid, state);
+
+    if (state.greetingCount > 1) {
+      await sendText(targetJid, `Hello again! 👋 I'm right here and ready to help.\n\nWhich service can I guide you with today?\n• **Van Rentals** (Small, Medium, Large, Luton, Refrigerated)\n• **Driver Allocations** (Cat B, C1, C, D1, C+E)\n• **UK CDS Customs Clearance** (£65 fixed fee)\n• **Parcels & Warehousing**\n\nTell me what you need, and I'll guide you step-by-step!`);
+      return;
+    }
+
+    await sendText(targetJid, `Hello! Welcome to Drivri Logistics & Globalline Customs. 👋\n\nHow can I guide you today with our official UK services?\n• **Self-Drive Van Rentals** (SWB £108/d, MWB £144/d, LWB £168/d, Luton £192/d, Refrigerated £252/d)\n• **Verified Driver Allocations** (Cat B £25/h, Cat C1 £32/h, Cat C £28/h, Cat D1 £34/h, Cat C+E £30/h)\n• **UK CDS Customs Clearance** (£65.00 entry fee + VAT for LHR/LGW & UK ports)\n• **Multi-Carrier Parcel Shipping & Pallet Warehousing**\n\nTell me a bit about your requirement, and I'll guide you through our exact UK compliance and official rates!`);
+    return;
+  }
+
+  // 2. CUSTOMS CLEARANCE FLOW
   if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
     state.service = 'CUSTOMS';
 
     if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
       state.phase = 'CONFIRMED_PAYMENT';
-    } else if (state.phase === 'DISCOVERY') {
+    } else if (state.phase === 'GREETED' || state.phase === 'DISCOVERY') {
       state.phase = 'QUOTE_PROPOSAL';
     }
     customerMemory.set(targetJid, state);
@@ -394,6 +412,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     }
   }
 
+  // 3. VAN HIRE FLOW (Medium, Luton, Small, Large, Refrigerated)
   if (lower.includes('van') || lower.includes('luton') || lower.includes('medium') || lower.includes('small') || lower.includes('large') || lower.includes('refrigerated') || lower.includes('hire') || lower.includes('rent')) {
     state.service = 'VAN_HIRE';
     if (lower.includes('medium') || lower.includes('mwb')) state.vanCategory = 'medium';
@@ -404,7 +423,7 @@ async function handleHumanConversation(targetJid, incomingText) {
 
     if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
       state.phase = 'CONFIRMED_PAYMENT';
-    } else if (state.phase === 'DISCOVERY') {
+    } else if (state.phase === 'GREETED' || state.phase === 'DISCOVERY') {
       state.phase = 'QUOTE_PROPOSAL';
     }
     customerMemory.set(targetJid, state);
@@ -443,6 +462,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     }
   }
 
+  // 4. GENERAL CONSULTATIVE FALLBACK GREETING
   await sendText(targetJid, `Hello! Welcome to Drivri Logistics & Globalline Customs. I'm your 24/7 Fleet & Compliance Advisor. 👋\n\nHow can I guide you today with our official UK services?\n• **Self-Drive Van Rentals** (SWB £108/d, MWB £144/d, LWB £168/d, Luton £192/d, Refrigerated £252/d)\n• **Verified Driver Allocations** (Cat B £25/h, Cat C1 £32/h, Cat C £28/h, Cat D1 £34/h, Cat C+E £30/h)\n• **UK CDS Customs Clearance** (£65.00 entry fee + VAT for LHR/LGW & UK ports)\n• **Multi-Carrier Parcel Couriers & Pallet Warehousing**\n\nTell me a bit about your requirement, and I'll guide you through our exact UK compliance and official rates!`);
 }
 
@@ -497,7 +517,6 @@ function generateLeadsFromPrompt(promptText) {
 
   const leads = [];
 
-  // Generate 60 fresh, uncontacted leads (10 per vertical)
   for (let i = 1; i <= 60; i++) {
     const vIndex = (i - 1) % verticals.length;
     const v = verticals[vIndex];
@@ -572,7 +591,6 @@ async function runCampaignDispatches() {
   lead.status = 'DISPATCHED';
   activeCampaign.lastDispatchTime = new Date().toLocaleTimeString();
 
-  // Fast dispatch cycle for multi-lead campaigns
   setTimeout(runCampaignDispatches, 2000);
 }
 
@@ -871,7 +889,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("60-Lead Dynamic Outreach & Invoicing Engine Active");
+  console.log("Interactive Non-Pushy Greeting & 60-Lead Engine Active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
