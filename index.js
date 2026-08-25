@@ -31,7 +31,7 @@ const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
 // -------------------------------------------------------------
-// EXPRESS MIDDLEWARE ROUTE HANDLERS
+// EXPRESS ROUTE & WEBHOOK HANDLERS
 // -------------------------------------------------------------
 app.use('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
@@ -466,6 +466,41 @@ async function handleHumanConversation(targetJid, incomingText) {
   await sendText(targetJid, `Hello! Welcome to Drivri Logistics & Globalline Customs. I'm your 24/7 Fleet & Compliance Advisor. 👋\n\nHow can I guide you today with our official UK services?\n• **Self-Drive Van Rentals** (SWB £108/d, MWB £144/d, LWB £168/d, Luton £192/d, Refrigerated £252/d)\n• **Verified Driver Allocations** (Cat B £25/h, Cat C1 £32/h, Cat C £28/h, Cat D1 £34/h, Cat C+E £30/h)\n• **UK CDS Customs Clearance** (£65.00 entry fee + VAT for LHR/LGW & UK ports)\n• **Multi-Carrier Parcel Couriers & Pallet Warehousing**\n\nTell me a bit about your requirement, and I'll guide you through our exact UK compliance and official rates!`);
 }
 
+// -------------------------------------------------------------
+// EVOLUTION API WEBHOOK ENDPOINT FOR INSTANT INBOUND MESSAGES
+// -------------------------------------------------------------
+app.all('/webhook/whatsapp*', async (req, res) => {
+  res.status(200).send('OK');
+  try {
+    const body = req.body;
+    if (!body) return;
+    
+    // Support various Evolution API webhook event names
+    const eventName = body.event || body.type || '';
+    if (!eventName.toLowerCase().includes('message')) return;
+
+    const data = body.data;
+    if (!data) return;
+
+    const record = Array.isArray(data) ? data[0] : (data.records ? data.records[0] : data);
+    if (!record || !record.key || record.key.fromMe) return;
+
+    const msgId = record.key.id;
+    if (answeredMessageIds.has(msgId)) return;
+    answeredMessageIds.add(msgId);
+
+    const targetJid = record.key.remoteJid || record.key.remoteJidAlt || '';
+    if (!targetJid || targetJid.includes('@g.us')) return;
+
+    let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
+    console.log(`[INSTANT WEBHOOK CUSTOMER CHAT] JID: ${targetJid} | Text: "${incomingText}"`);
+
+    await handleHumanConversation(targetJid, incomingText);
+  } catch (err) {
+    console.error('[WEBHOOK PROCESS ERROR]', err.message);
+  }
+});
+
 // INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE
 async function pollInboundMessages() {
   try {
@@ -889,7 +924,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Interactive Non-Pushy Greeting & 60-Lead Engine Active");
+  console.log("Instant Webhook & Polling Active on Render");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
