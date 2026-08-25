@@ -21,9 +21,138 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// RENDER HEALTH CHECK ENDPOINT (CRITICAL FOR RENDER DEPLOYMENT PASS)
-app.all('/health*', (req, res) => {
+const SUPPORT_PHONE = '+44 7988 599 326';
+const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
+const DIRECTOR_EMAIL = 'info@drivri.co.uk';
+
+// GUARANTEED FUNCTIONAL PUBLIC DOMAIN (0% 404)
+const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
+const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
+
+// -------------------------------------------------------------
+// EXPRESS MIDDLEWARE ROUTE HANDLERS (EXACT MATCHES FOR ALL PATHS)
+// -------------------------------------------------------------
+app.use('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
+});
+
+app.use('/verify-id', (req, res) => {
+  const session = req.query.session || `DRV-${Date.now()}`;
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Drivri ComplyCube ID & DVLA Check</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
+        <div class="w-16 h-16 bg-cyan-500/10 text-cyan-400 rounded-full flex items-center justify-center mx-auto text-2xl font-bold border border-cyan-500/20">
+          🔒
+        </div>
+        <h1 class="text-xl font-bold text-white">Drivri Identity & DVLA Licence Check</h1>
+        <p class="text-xs text-slate-400">ComplyCube Verification Session: <span class="font-mono text-cyan-400">${session}</span></p>
+        
+        <div class="bg-slate-900/60 p-4 rounded-xl text-left space-y-2 border border-slate-700 text-xs">
+          <p class="text-slate-300 font-semibold">• Step 1: Upload Photo ID (UK Driving Licence or Passport)</p>
+          <p class="text-slate-300 font-semibold">• Step 2: DVLA Share Code Verification</p>
+          <p class="text-slate-300 font-semibold">• Step 3: Instant Automated Vehicle Release Clearance</p>
+        </div>
+
+        <button onclick="alert('Verification Portal Active. Please upload your DVLA Share code and Driving Licence photo to complete check.')" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-900 font-bold py-3 rounded-xl hover:from-cyan-400 hover:to-blue-500 transition text-sm">
+          Start ID Verification Now
+        </button>
+
+        <p class="text-xs text-slate-500">Drivri Logistics Limited • 24/7 Support Line: ${SUPPORT_PHONE}</p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+app.use('/pay', (req, res) => {
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Drivri Payment Gateway</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
+        <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl font-bold border border-emerald-500/20">
+          💳
+        </div>
+        <h1 class="text-xl font-bold text-white">Drivri Secure Payment Portal</h1>
+        <p class="text-xs text-slate-400">Supports Credit/Debit Cards, Apple Pay & Google Pay (256-bit Encrypted)</p>
+
+        <a href="/" class="block w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
+          Return to Control Center
+        </a>
+
+        <p class="text-xs text-slate-500">Drivri Logistics Limited • Support Line: ${SUPPORT_PHONE}</p>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+app.use('/booking-success', (req, res) => {
+  const sessionId = req.query.session_id || 'ACTIVE';
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Drivri Booking Confirmed!</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
+        <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-emerald-500/40 animate-bounce">
+          ✓
+        </div>
+        <h1 class="text-2xl font-bold text-white">Payment Received & Booking Confirmed!</h1>
+        <p class="text-xs text-emerald-400 font-mono">Stripe Transaction: ${sessionId}</p>
+
+        <a href="/" class="block w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
+          Return to Dashboard
+        </a>
+      </div>
+    </body>
+    </html>
+  `);
+});
+
+app.use('/booking-cancel', (req, res) => {
+  res.status(200).send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Drivri Payment Cancelled</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+    </head>
+    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
+      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
+        <div class="w-16 h-16 bg-yellow-500/20 text-yellow-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-yellow-500/40">
+          !
+        </div>
+        <h1 class="text-xl font-bold text-white">Payment Attempt Cancelled</h1>
+
+        <a href="/pay" class="block w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
+          Try Payment Again
+        </a>
+      </div>
+    </body>
+    </html>
+  `);
 });
 
 // Live Credentials
@@ -32,14 +161,6 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
 const BASE_URL = process.env.EVOLUTION_BASE_URL || 'http://2.24.128.226:8080';
 const INSTANCE = process.env.EVOLUTION_INSTANCE || 'DriveGetLive';
 const INSTANCE_KEY = process.env.EVOLUTION_APIKEY || '';
-
-const SUPPORT_PHONE = '+44 7988 599 326';
-const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
-const DIRECTOR_EMAIL = 'info@drivri.co.uk';
-
-// GUARANTEED FUNCTIONAL PUBLIC DOMAIN (0% 404)
-const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
-const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
 // Memory Stores
 const customerMemory = new Map();
@@ -83,128 +204,6 @@ function addLog(msg) {
   if (activeCampaign.logs.length > 100) activeCampaign.logs.pop();
   console.log(formatted);
 }
-
-// -------------------------------------------------------------
-// REAL FUNCTIONAL LANDING PAGES REGISTERED EARLY BEFORE OTHER ROUTES
-// -------------------------------------------------------------
-app.all('/verify-id*', (req, res) => {
-  const session = req.query.session || `DRV-${Date.now()}`;
-  res.status(200).send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Drivri ComplyCube ID & DVLA Check</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
-      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
-        <div class="w-16 h-16 bg-cyan-500/10 text-cyan-400 rounded-full flex items-center justify-center mx-auto text-2xl font-bold border border-cyan-500/20">
-          🔒
-        </div>
-        <h1 class="text-xl font-bold text-white">Drivri Identity & DVLA Licence Check</h1>
-        <p class="text-xs text-slate-400">ComplyCube Verification Session: <span class="font-mono text-cyan-400">${session}</span></p>
-        
-        <div class="bg-slate-900/60 p-4 rounded-xl text-left space-y-2 border border-slate-700 text-xs">
-          <p class="text-slate-300 font-semibold">• Step 1: Upload Photo ID (UK Driving Licence or Passport)</p>
-          <p class="text-slate-300 font-semibold">• Step 2: DVLA Share Code Verification</p>
-          <p class="text-slate-300 font-semibold">• Step 3: Instant Automated Vehicle Release Clearance</p>
-        </div>
-
-        <button onclick="alert('Verification Portal Active. Please upload your DVLA Share code and Driving Licence photo to complete check.')" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-900 font-bold py-3 rounded-xl hover:from-cyan-400 hover:to-blue-500 transition text-sm">
-          Start ID Verification Now
-        </button>
-
-        <p class="text-xs text-slate-500">Drivri Logistics Limited • 24/7 Support Line: ${SUPPORT_PHONE}</p>
-      </div>
-    </body>
-    </html>
-  `);
-});
-
-app.all('/pay*', (req, res) => {
-  res.status(200).send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Drivri Payment Gateway</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
-      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
-        <div class="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-2xl font-bold border border-emerald-500/20">
-          💳
-        </div>
-        <h1 class="text-xl font-bold text-white">Drivri Secure Payment Portal</h1>
-        <p class="text-xs text-slate-400">Supports Credit/Debit Cards, Apple Pay & Google Pay (256-bit Encrypted)</p>
-
-        <a href="/" class="block w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
-          Return to Control Center
-        </a>
-
-        <p class="text-xs text-slate-500">Drivri Logistics Limited • Support Line: ${SUPPORT_PHONE}</p>
-      </div>
-    </body>
-    </html>
-  `);
-});
-
-app.all('/booking-success*', (req, res) => {
-  const sessionId = req.query.session_id || 'ACTIVE';
-  res.status(200).send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Drivri Booking Confirmed!</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
-      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
-        <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-emerald-500/40 animate-bounce">
-          ✓
-        </div>
-        <h1 class="text-2xl font-bold text-white">Payment Received & Booking Confirmed!</h1>
-        <p class="text-xs text-emerald-400 font-mono">Stripe Transaction: ${sessionId}</p>
-
-        <a href="/" class="block w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
-          Return to Dashboard
-        </a>
-      </div>
-    </body>
-    </html>
-  `);
-});
-
-app.all('/booking-cancel*', (req, res) => {
-  res.status(200).send(`
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Drivri Payment Cancelled</title>
-      <script src="https://cdn.tailwindcss.com"></script>
-    </head>
-    <body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-4">
-      <div class="max-w-md w-full bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-2xl text-center space-y-6">
-        <div class="w-16 h-16 bg-yellow-500/20 text-yellow-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-yellow-500/40">
-          !
-        </div>
-        <h1 class="text-xl font-bold text-white">Payment Attempt Cancelled</h1>
-
-        <a href="/pay" class="block w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
-          Try Payment Again
-        </a>
-      </div>
-    </body>
-    </html>
-  `);
-});
 
 // DRIVRI KNOWLEDGE BASE
 const DRIVRI_KNOWLEDGE = {
@@ -747,7 +746,7 @@ async function runCampaignDispatches() {
 }
 
 // PDF REPORT GENERATOR
-app.all('/api/download-report-pdf*', (req, res) => {
+app.use('/api/download-report-pdf', (req, res) => {
   try {
     if (!PDFDocument) {
       return res.status(500).send('PDF generation requires pdfkit module');
@@ -828,7 +827,7 @@ app.post('/api/generate-and-dispatch-leads', (req, res) => {
   });
 });
 
-app.all('/api/campaign-status*', (req, res) => {
+app.use('/api/campaign-status', (req, res) => {
   res.json(activeCampaign);
 });
 
