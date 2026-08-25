@@ -157,11 +157,12 @@ function sendText(targetJid, text) {
   });
 }
 
+// STRIPE API SESSION GENERATOR
 function createStripeCheckoutSession(serviceName, amountPence, customerEmail, customerName, description = null) {
   return new Promise((resolve) => {
     const activeKey = process.env.STRIPE_SECRET_KEY || STRIPE_SECRET_KEY;
     if (!activeKey) return resolve({ success: false, error: 'Stripe key missing', url: `${APP_DOMAIN}/pay` });
-    
+
     const postData = querystring.stringify({
       'mode': 'payment',
       'payment_method_types[0]': 'card',
@@ -215,7 +216,7 @@ function sendBookingConfirmationEmail(customerEmail, customerName, serviceName, 
   return new Promise((resolve) => {
     const activeResendKey = process.env.RESEND_API_KEY || RESEND_API_KEY;
     if (!activeResendKey) return resolve({ status: 400, error: 'Resend key missing' });
-    
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 680px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background-color: #ffffff;">
         <div style="background-color: #0d1b2a; color: #ffffff; padding: 24px; text-align: center;">
@@ -333,20 +334,23 @@ async function handleHumanConversation(targetJid, incomingText) {
   let profile = customerMemory.get(targetJid) || {
     stage: 'INTAKE',
     email: '',
-    vehicleClass: 'small',
+    vehicleClass: 'medium',
     licenceCategory: 'B',
     hireHours: 24,
-    hasOwnInsurance: false
+    hasOwnInsurance: false,
+    lastQuote: null
   };
 
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) profile.email = emailMatch[0];
+  if (emailMatch) {
+    profile.email = emailMatch[0];
+  }
 
   // Parse Vehicle Classes
-  if (lower.includes('luton')) profile.vehicleClass = 'luton';
+  if (lower.includes('medium') || lower.includes('mwb')) profile.vehicleClass = 'medium';
+  else if (lower.includes('luton')) profile.vehicleClass = 'luton';
   else if (lower.includes('refrigerated')) profile.vehicleClass = 'refrigerated';
   else if (lower.includes('large') || lower.includes('lwb')) profile.vehicleClass = 'large';
-  else if (lower.includes('medium') || lower.includes('mwb')) profile.vehicleClass = 'medium';
   else if (lower.includes('small') || lower.includes('swb')) profile.vehicleClass = 'small';
 
   // Parse Hours
@@ -359,31 +363,80 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   customerMemory.set(targetJid, profile);
 
-  // If customer asks for Luton Van / Van Hire Quote:
-  if (lower.includes('luton') || lower.includes('van') || lower.includes('quote') || lower.includes('hire') || lower.includes('rent')) {
-    const vanPricing = PRICING_VAN_RENTAL[profile.vehicleClass] || PRICING_VAN_RENTAL.luton;
+  // IF CUSTOMER SUBMITS THEIR EMAIL ONLY (e.g. Info@travsify.com)
+  if (emailMatch && text.length < 50 && !lower.includes('van') && !lower.includes('quote')) {
+    const activeEmail = profile.email;
+    const vanPricing = PRICING_VAN_RENTAL[profile.vehicleClass] || PRICING_VAN_RENTAL.medium;
     const insProduct = INSURANCE_PRODUCTS.comprehensive_hire;
 
-    // Daily van rental capped at 8 hrs (£192/day max for Luton)
+    const vanNetGBP = vanPricing.dailyCap8h;
+    const insuranceNetGBP = insProduct.dailyCap;
+    const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
+    const vatAmountGBP = netSubtotalGBP * 0.20;
+    const totalGrossGBP = netSubtotalGBP + vatAmountGBP;
+
+    const standardDepositAmount = 200;
+    const option1TotalPence = (totalGrossGBP + standardDepositAmount) * 100;
+    const zeroDepositFeeGBP = totalGrossGBP * 0.25;
+    const option2TotalPence = (totalGrossGBP + zeroDepositFeeGBP) * 100;
+
+    const stripeRes1 = await createStripeCheckoutSession(
+      `${vanPricing.name} Self-Drive (24h Rental) + £${standardDepositAmount} Deposit`,
+      option1TotalPence,
+      activeEmail,
+      'Valued Hirer'
+    );
+    const stripeUrl1 = stripeRes1.url || `${APP_DOMAIN}/pay`;
+
+    const stripeRes2 = await createStripeCheckoutSession(
+      `${vanPricing.name} Self-Drive (24h Rental) + 25% Zero-Deposit Fee`,
+      option2TotalPence,
+      activeEmail,
+      'Valued Hirer'
+    );
+    const stripeUrl2 = stripeRes2.url || `${APP_DOMAIN}/pay`;
+
+    const bookingSummary = `${vanPricing.name} Hire | Duration: 24 Hours | 200 Miles Included Daily`;
+    const financialBreakdown = {
+      subtotal: `${vanPricing.name} Daily Rate (8-hr cap): £${vanNetGBP.toFixed(2)}`,
+      insurance: `Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}`,
+      vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)} (Gross: £${totalGrossGBP.toFixed(2)})`,
+      depositPolicy: `Standard Refundable Deposit: £${standardDepositAmount}.00`,
+      zeroDepositPolicy: `Zero-Deposit Option: 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)})`,
+      totalAmount: `£${totalGrossGBP.toFixed(2)} GBP + Deposit`
+    };
+
+    await sendBookingConfirmationEmail(activeEmail, 'Valued Hirer', `${vanPricing.name} 24h Hire`, bookingSummary, financialBreakdown, null, stripeUrl1, stripeUrl2);
+
+    await sendText(targetJid, `Thank you! I've sent your official pro-forma invoice and Stripe payment links to ${activeEmail}! 📧\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n👉 Option 1 (Standard Deposit £${standardDepositAmount}): ${stripeUrl1}\n👉 Option 2 (Zero Deposit Waiver Fee £${zeroDepositFeeGBP.toFixed(2)}): ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\n👉 Complete ID Check: ${APP_DOMAIN}/verify-id?session=DRV-${Date.now()}\n\nNeed any adjustments or extra driver hours? Just reply here!`);
+    return;
+  }
+
+  // IF CUSTOMER ASKS FOR VAN HIRE QUOTE (Medium, Luton, Small, Large, Refrigerated):
+  if (lower.includes('medium') || lower.includes('luton') || lower.includes('van') || lower.includes('quote') || lower.includes('hire') || lower.includes('rent')) {
+    const vanPricing = PRICING_VAN_RENTAL[profile.vehicleClass] || PRICING_VAN_RENTAL.medium;
+    const insProduct = INSURANCE_PRODUCTS.comprehensive_hire;
+
+    // Daily van rental capped at 8 hrs (Medium £144, Luton £192)
     const vanNetGBP = vanPricing.dailyCap8h;
     const insuranceNetGBP = insProduct.dailyCap; // £28/day cap
     const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
     const vatAmountGBP = netSubtotalGBP * 0.20; // 20% UK VAT
-    const totalGrossGBP = netSubtotalGBP + vatAmountGBP; // £264.00
+    const totalGrossGBP = netSubtotalGBP + vatAmountGBP;
 
     const standardDepositAmount = 200; // £200.00 Daily Deposit
     const option1TotalPence = (totalGrossGBP + standardDepositAmount) * 100;
 
-    const zeroDepositFeeGBP = totalGrossGBP * 0.25; // £66.00 Fee
+    const zeroDepositFeeGBP = totalGrossGBP * 0.25; // 25% Waiver Fee
     const option2TotalPence = (totalGrossGBP + zeroDepositFeeGBP) * 100;
 
-    // Generate Live Stripe Session Links
+    // Generate Direct Stripe Checkout Session Links
     const stripeRes1 = await createStripeCheckoutSession(
       `${vanPricing.name} Self-Drive (24h Rental) + £${standardDepositAmount} Refundable Deposit`,
       option1TotalPence,
       profile.email,
       'Valued Hirer',
-      `Luton Van 8-hr Daily Cap (£192) + Comprehensive Insurance (£28) + 20% VAT (£44) + £200 Refundable Deposit`
+      `${vanPricing.name} 8-hr Daily Cap (£${vanNetGBP}) + Comprehensive Insurance (£28) + 20% VAT (£${vatAmountGBP.toFixed(2)}) + £200 Deposit`
     );
     const stripeUrl1 = stripeRes1.url || `${APP_DOMAIN}/pay`;
 
@@ -392,7 +445,7 @@ async function handleHumanConversation(targetJid, incomingText) {
       option2TotalPence,
       profile.email,
       'Valued Hirer',
-      `Luton Van 8-hr Daily Cap (£192) + Comprehensive Insurance (£28) + 20% VAT (£44) + £66 Zero-Deposit Waiver Fee`
+      `${vanPricing.name} 8-hr Daily Cap (£${vanNetGBP}) + Comprehensive Insurance (£28) + 20% VAT (£${vatAmountGBP.toFixed(2)}) + £${zeroDepositFeeGBP.toFixed(2)} Zero-Deposit Fee`
     );
     const stripeUrl2 = stripeRes2.url || `${APP_DOMAIN}/pay`;
 
@@ -403,9 +456,9 @@ async function handleHumanConversation(targetJid, incomingText) {
 
     // If Email provided, send email confirmation
     if (profile.email) {
-      const bookingSummary = `Luton Van Hire | Duration: 24 Hours | 200 Miles Included Daily (£0.60/mile excess)`;
+      const bookingSummary = `${vanPricing.name} Hire | Duration: 24 Hours | 200 Miles Included Daily (£0.60/mile excess)`;
       const financialBreakdown = {
-        subtotal: `Luton Van Daily Rate (8-hr cap): £${vanNetGBP.toFixed(2)}`,
+        subtotal: `${vanPricing.name} Daily Rate (8-hr cap): £${vanNetGBP.toFixed(2)}`,
         insurance: `Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}`,
         vat: `20% UK VAT: £${vatAmountGBP.toFixed(2)} (Gross: £${totalGrossGBP.toFixed(2)})`,
         depositPolicy: `Standard Refundable Deposit: £${standardDepositAmount}.00`,
@@ -417,12 +470,12 @@ async function handleHumanConversation(targetJid, incomingText) {
 
     let emailAskNotice = profile.email ? `\n\nI've also sent your invoice breakdown to ${profile.email}.` : `\n\nTo receive an official PDF invoice directly to your inbox, please reply with your Email Address!`;
 
-    await sendText(targetJid, `Here is your instant quote for ${vanPricing.name} (24 Hours Rental):\n\n📊 INVOICE & PRICING BREAKDOWN (Inc. 20% UK VAT):\n• Luton Van (8-hr capped daily rate): £${vanNetGBP.toFixed(2)}\n• Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}\n• 20% UK VAT: £${vatAmountGBP.toFixed(2)}\n• Total Gross Rental: £${totalGrossGBP.toFixed(2)}\n• Included Daily Allowance: 200 Miles included (£0.60 per mile on excess miles)\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n\n👉 OPTION 1 (Standard Refundable Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + £${standardDepositAmount} Refundable Deposit:\nPay via Stripe: ${stripeUrl1}\n\n👉 OPTION 2 (Zero Security Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)}):\nPay via Stripe: ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\nComplete your DVLA & ID check to activate vehicle release:\n👉 Verify ID: ${complyCubeLink}${emailAskNotice}\n\nCall line: ${SUPPORT_PHONE}.`);
+    await sendText(targetJid, `Here is your instant quote for ${vanPricing.name} (24 Hours Rental):\n\n📊 INVOICE & PRICING BREAKDOWN (Inc. 20% UK VAT):\n• ${vanPricing.name} (8-hr capped daily rate): £${vanNetGBP.toFixed(2)}\n• Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}\n• 20% UK VAT: £${vatAmountGBP.toFixed(2)}\n• Total Gross Rental: £${totalGrossGBP.toFixed(2)}\n• Included Daily Allowance: 200 Miles included (£0.60 per mile on excess miles)\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n\n👉 OPTION 1 (Standard Refundable Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + £${standardDepositAmount} Refundable Deposit:\nPay via Stripe: ${stripeUrl1}\n\n👉 OPTION 2 (Zero Security Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)}):\nPay via Stripe: ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\nComplete your DVLA & ID check to activate vehicle release:\n👉 Verify ID: ${complyCubeLink}${emailAskNotice}\n\nCall line: ${SUPPORT_PHONE}.`);
     return;
   }
 
   // Greeting Fallback
-  await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'd be happy to help you reserve a Luton van or driver! Could you share your email address so I can send your official quote and payment link?`);
+  await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'd be happy to help you reserve a van or driver! Could you share your email address so I can send your official quote and payment link?`);
 }
 
 // INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE
@@ -467,8 +520,6 @@ async function pollInboundMessages() {
 // -------------------------------------------------------------
 // REAL FUNCTIONAL LANDING PAGES FOR ALL LINKS (NO MORE 404s!)
 // -------------------------------------------------------------
-
-// 1. Functional ComplyCube ID & DVLA Driving Licence Check Landing Page
 app.get('/verify-id', (req, res) => {
   const session = req.query.session || `DRV-${Date.now()}`;
   res.send(`
@@ -505,7 +556,6 @@ app.get('/verify-id', (req, res) => {
   `);
 });
 
-// 2. Functional Payment Fallback Portal Page
 app.get('/pay', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -523,11 +573,6 @@ app.get('/pay', (req, res) => {
         </div>
         <h1 class="text-xl font-bold text-white">Drivri Secure Payment Portal</h1>
         <p class="text-xs text-slate-400">Supports Credit/Debit Cards, Apple Pay & Google Pay (256-bit Encrypted)</p>
-        
-        <div class="bg-slate-900/60 p-4 rounded-xl text-left space-y-2 border border-slate-700 text-xs">
-          <p class="text-slate-300">Option 1: Standard Refundable Security Deposit (£200 Daily / £500 Weekly)</p>
-          <p class="text-slate-300">Option 2: 25% Non-Refundable Zero-Deposit Waiver Fee</p>
-        </div>
 
         <a href="/" class="block w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
           Return to Control Center
@@ -540,7 +585,6 @@ app.get('/pay', (req, res) => {
   `);
 });
 
-// 3. Functional Booking Success Page
 app.get('/booking-success', (req, res) => {
   const sessionId = req.query.session_id || 'ACTIVE';
   res.send(`
@@ -559,12 +603,6 @@ app.get('/booking-success', (req, res) => {
         </div>
         <h1 class="text-2xl font-bold text-white">Payment Received & Booking Confirmed!</h1>
         <p class="text-xs text-emerald-400 font-mono">Stripe Transaction: ${sessionId}</p>
-        
-        <div class="bg-slate-900/60 p-4 rounded-xl text-left space-y-2 border border-slate-700 text-xs text-slate-300">
-          <p>• Your van reservation has been locked into the Drivri dispatch schedule.</p>
-          <p>• An official invoice receipt has been dispatched to your email.</p>
-          <p>• Our dispatch team is preparing your vehicle handover telemetry.</p>
-        </div>
 
         <a href="/" class="block w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
           Return to Dashboard
@@ -575,7 +613,6 @@ app.get('/booking-success', (req, res) => {
   `);
 });
 
-// 4. Functional Booking Cancel Page
 app.get('/booking-cancel', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -592,7 +629,6 @@ app.get('/booking-cancel', (req, res) => {
           !
         </div>
         <h1 class="text-xl font-bold text-white">Payment Attempt Cancelled</h1>
-        <p class="text-xs text-slate-400">Your reservation has not been charged.</p>
 
         <a href="/pay" class="block w-full bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl transition text-sm">
           Try Payment Again
