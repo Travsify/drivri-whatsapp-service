@@ -26,7 +26,7 @@ const SUPPORT_PHONE = '+44 7988 599 326';
 const DIRECTOR_PHONE = process.env.DIRECTOR_PHONE || '447490347577';
 const DIRECTOR_EMAIL = 'info@drivri.co.uk';
 
-// GUARANTEED FUNCTIONAL DOMAIN FOR COMPLYCUBE & STRIPE REDIRECTS (0% 404)
+// GUARANTEED FUNCTIONAL PUBLIC DOMAIN
 const PUBLIC_DOMAIN = 'https://drivri-whatsapp-service.onrender.com';
 const APP_DOMAIN = process.env.RENDER_EXTERNAL_URL || PUBLIC_DOMAIN;
 
@@ -73,9 +73,7 @@ function addLog(msg) {
   console.log(formatted);
 }
 
-// -------------------------------------------------------------
-// OFFICIAL DRIVRI PROPRIETARY DATA & KNOWLEDGE BASE
-// -------------------------------------------------------------
+// DRIVRI KNOWLEDGE BASE
 const DRIVRI_KNOWLEDGE = {
   companyName: 'Drivri Logistics Limited & Globalline Customs',
   website: 'https://drivri.co.uk',
@@ -542,7 +540,9 @@ async function pollInboundMessages() {
   }
 }
 
-// REAL FUNCTIONAL LANDING PAGES FOR ALL LINKS
+// -------------------------------------------------------------
+// REAL FUNCTIONAL LANDING PAGES REGISTERED BEFORE APP.LISTEN
+// -------------------------------------------------------------
 app.get('/verify-id', (req, res) => {
   const session = req.query.session || `DRV-${Date.now()}`;
   res.send(`
