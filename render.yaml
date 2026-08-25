@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: drivri-whatsapp-service
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EVOLUTION_BASE_URL
+        value: http://2.24.128.226:8080
+      - key: EVOLUTION_INSTANCE
+        value: DriveGetLive
+      - key: EVOLUTION_APIKEY
+        value: DC905640-4263-4DFA-9959-26B47F5425D0
+      - key: DIRECTOR_PHONE
+        value: "447490347577"
