@@ -41,8 +41,23 @@ const BASE_URL = process.env.EVOLUTION_BASE_URL || 'http://2.24.128.226:8080';
 const INSTANCE = process.env.EVOLUTION_INSTANCE || 'DriveGetLive';
 const INSTANCE_KEY = process.env.EVOLUTION_APIKEY || '';
 
+// HELPER: Always get clean @s.whatsapp.net JID
+function getCanonicalJid(key) {
+  if (!key) return '';
+  if (key.remoteJidAlt && key.remoteJidAlt.includes('@s.whatsapp.net')) {
+    return key.remoteJidAlt;
+  }
+  if (key.remoteJid && key.remoteJid.includes('@s.whatsapp.net')) {
+    return key.remoteJid;
+  }
+  if (key.participant && key.participant.includes('@s.whatsapp.net')) {
+    return key.participant;
+  }
+  return key.remoteJidAlt || key.remoteJid || '';
+}
+
 // -------------------------------------------------------------
-// TOP-PRIORITY WEBHOOK & ROUTE HANDLERS (GUARANTEED 200 OK)
+// TOP-PRIORITY WEBHOOK & ROUTE HANDLERS
 // -------------------------------------------------------------
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'online', service: 'Drivri WhatsApp Service', timestamp: new Date().toISOString() });
@@ -139,63 +154,31 @@ function getPayHtml() {
 // -------------------------------------------------------------
 // EVOLUTION API WEBHOOK ENDPOINT FOR INSTANT INBOUND MESSAGES
 // -------------------------------------------------------------
-app.all('/webhook/whatsapp*', async (req, res) => {
-  res.status(200).json({ status: 'success', message: 'Webhook received' });
-  try {
-    const body = req.body;
-    if (!body) return;
-    
-    const eventName = body.event || body.type || '';
-    if (!eventName.toLowerCase().includes('message')) return;
+async function processIncomingRecord(record) {
+  if (!record || !record.key || record.key.fromMe) return;
 
-    const data = body.data;
-    if (!data) return;
+  const msgId = record.key.id;
+  if (answeredMessageIds.has(msgId)) return;
+  answeredMessageIds.add(msgId);
 
-    const record = Array.isArray(data) ? data[0] : (data.records ? data.records[0] : data);
-    if (!record || !record.key || record.key.fromMe) return;
+  const targetJid = getCanonicalJid(record.key);
+  if (!targetJid || targetJid.includes('@g.us')) return;
 
-    const msgId = record.key.id;
-    if (answeredMessageIds.has(msgId)) return;
-    answeredMessageIds.add(msgId);
+  let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
+  console.log(`[INCOMING CUSTOMER MESSAGE] JID: ${targetJid} | Text: "${incomingText}"`);
 
-    const targetJid = record.key.remoteJid || record.key.remoteJidAlt || '';
-    if (!targetJid || targetJid.includes('@g.us')) return;
-
-    let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
-    console.log(`[INSTANT WEBHOOK CUSTOMER CHAT] JID: ${targetJid} | Text: "${incomingText}"`);
-
-    await handleHumanConversation(targetJid, incomingText);
-  } catch (err) {
-    console.error('[WEBHOOK PROCESS ERROR]', err.message);
-  }
-});
+  await handleHumanConversation(targetJid, incomingText);
+}
 
 app.all('/webhook/whatsapp', async (req, res) => {
-  res.status(200).json({ status: 'success', message: 'Webhook received' });
+  res.status(200).json({ status: 'success' });
   try {
     const body = req.body;
     if (!body) return;
-    
-    const eventName = body.event || body.type || '';
-    if (!eventName.toLowerCase().includes('message')) return;
-
     const data = body.data;
     if (!data) return;
-
     const record = Array.isArray(data) ? data[0] : (data.records ? data.records[0] : data);
-    if (!record || !record.key || record.key.fromMe) return;
-
-    const msgId = record.key.id;
-    if (answeredMessageIds.has(msgId)) return;
-    answeredMessageIds.add(msgId);
-
-    const targetJid = record.key.remoteJid || record.key.remoteJidAlt || '';
-    if (!targetJid || targetJid.includes('@g.us')) return;
-
-    let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
-    console.log(`[INSTANT WEBHOOK CUSTOMER CHAT] JID: ${targetJid} | Text: "${incomingText}"`);
-
-    await handleHumanConversation(targetJid, incomingText);
+    await processIncomingRecord(record);
   } catch (err) {
     console.error('[WEBHOOK PROCESS ERROR]', err.message);
   }
@@ -325,8 +308,9 @@ function requestEvolution(urlPath, method = 'POST', data = {}) {
 }
 
 function sendText(targetJid, text) {
+  const cleanJid = targetJid.includes('@') ? targetJid.split('@')[0] : targetJid;
   return requestEvolution(`/message/sendText/${INSTANCE}`, 'POST', {
-    number: targetJid,
+    number: cleanJid,
     text: text
   });
 }
@@ -565,20 +549,7 @@ async function pollInboundMessages() {
     }
 
     for (const record of records) {
-      if (!record.key || record.key.fromMe) continue;
-
-      const msgId = record.key.id;
-      if (answeredMessageIds.has(msgId)) continue;
-      
-      answeredMessageIds.add(msgId);
-
-      const targetJid = record.key.remoteJid || record.key.remoteJidAlt || '';
-      if (!targetJid || targetJid.includes('@g.us')) continue;
-
-      let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
-      console.log(`[INCOMING CUSTOMER MESSAGE] JID: ${targetJid} | Text: "${incomingText}"`);
-
-      await handleHumanConversation(targetJid, incomingText);
+      await processIncomingRecord(record);
     }
   } catch (err) {}
 }
@@ -970,7 +941,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Webhook /webhook/whatsapp registered at top of stack");
+  console.log("Clean Express v5 routing & @s.whatsapp.net resolution active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
