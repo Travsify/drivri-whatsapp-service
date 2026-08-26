@@ -403,7 +403,7 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// STRICT DATA-TRAINED INTERACTIVE ENGINE
+// STRICT DATA-TRAINED HUMAN-LIKE CONVERSATIONAL ENGINE
 // -------------------------------------------------------------
 async function handleHumanConversation(targetJid, incomingText) {
   const text = incomingText.trim();
@@ -429,7 +429,7 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
-  // 1. SIMPLE GREETING HANDLER (ALWAYS INTERACTIVE & NON-PUSHY)
+  // 1. SIMPLE GREETING HANDLER (WARM, HUMAN, CONVERSATIONAL - NO SALES PITCH OR PRICE DUMPS)
   if (isSimpleGreeting) {
     state.greetingCount++;
     customerMemory.set(targetJid, state);
@@ -441,11 +441,11 @@ async function handleHumanConversation(targetJid, incomingText) {
     }
 
     if (state.greetingCount > 1) {
-      await sendText(targetJid, `Hello again! 👋 I'm right here and ready to help.\n\nWhich service can I guide you with today?\n• **Van Rentals** (Small, Medium, Large, Luton, Refrigerated)\n• **Driver Allocations** (Cat B, C1, C, D1, C+E)\n• **UK CDS Customs Clearance** (£65 fixed fee)\n• **Parcels & Warehousing**\n\nTell me what you need, and I'll guide you step-by-step!`);
+      await sendText(targetJid, `Hello again! 👋 I'm right here whenever you're ready.\n\nJust let me know what you're looking for (van rental, driver allocation, customs clearance, or couriers) and I'll be glad to help you out!`);
       return;
     }
 
-    await sendText(targetJid, `Hello! Welcome to Drivri Logistics & Globalline Customs. 👋\n\nHow can I guide you today with our official UK services?\n• **Self-Drive Van Rentals** (SWB £108/d, MWB £144/d, LWB £168/d, Luton £192/d, Refrigerated £252/d)\n• **Verified Driver Allocations** (Cat B £25/h, Cat C1 £32/h, Cat C £28/h, Cat D1 £34/h, Cat C+E £30/h)\n• **UK CDS Customs Clearance** (£65.00 entry fee + VAT for LHR/LGW & UK ports)\n• **Multi-Carrier Parcel Shipping & Pallet Warehousing**\n\nTell me a bit about your requirement, and I'll guide you through our exact UK compliance and official rates!`);
+    await sendText(targetJid, `Hi there! Welcome to Drivri Logistics. 👋\n\nI'm here to help you get sorted with whatever you need today—whether that's renting a van, allocating a driver, handling UK customs clearance, or courier deliveries.\n\nWhat are you looking to get done today? Let me know a few details and I'll guide you right through!`);
     return;
   }
 
@@ -461,7 +461,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     customerMemory.set(targetJid, state);
 
     if (state.phase === 'QUOTE_PROPOSAL') {
-      await sendText(targetJid, `Hello! Welcome to Drivri & Globalline Customs. I'm your UK Customs Compliance Specialist. 🛃\n\nI'd be glad to help clear your UK CDS import/export declaration for London Heathrow (LHR), Gatwick, Manchester, or UK sea ports.\n\nTo tailor your clearance accurately, could you confirm:\n1. Is your cargo arriving via Air Freight or Sea Container?\n2. Do you have a registered GB EORI Number?\n3. What is your preferred email address for invoice dispatch?\n\nOur Drivri official fixed clearance fee is **£65.00 + 20% VAT (£78.00 Gross)** including fast airport badge release!`);
+      await sendText(targetJid, `Got it! I can certainly take care of your UK CDS Customs Clearance for London Heathrow (LHR), Gatwick, Manchester, or any UK port. 🛃\n\nTo make sure we have everything set up properly, could you share:\n1. Is your cargo arriving via Air Freight or Sea Container?\n2. Do you have a GB EORI Number registered?\n3. What email address should we send your official invoice to?\n\nOur fixed clearance rate is **£65.00 + 20% VAT (£78.00 Gross)** including fast airport badge release!`);
       return;
     }
 
@@ -496,7 +496,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
 
     if (state.phase === 'QUOTE_PROPOSAL' && !lower.includes('ready') && !lower.includes('book') && !lower.includes('pay')) {
-      await sendText(targetJid, `Hello! Welcome to Drivri Logistics. I'm your UK Van Hire & Fleet Advisor. 🚛\n\nI'd be glad to help organize your **${vanInfo.name}** (Payload: ${vanInfo.payload}, Volume: ${vanInfo.volume})!\n\nTo tailor your exact booking details before we generate your quote:\n1. What date and pickup location/postcode do you require for hire?\n2. What is your expected hire duration?\n3. Do you have a UK/EU Driving Licence held for 1+ years (Minimum age 21+)?\n\n*(Note: All Drivri self-drive hires include 200 Miles daily, 8-hr daily rate capping, and comprehensive insurance cover).*`);
+      await sendText(targetJid, `Perfect! I can help you reserve a **${vanInfo.name}** (Payload: ${vanInfo.payload}, Volume: ${vanInfo.volume}). 🚛\n\nTo tailor your booking before we generate your quote, could you let me know:\n1. What date and pickup location/postcode do you need the van for?\n2. How long do you plan to hire it?\n3. Do you have a UK/EU Driving Licence held for 1+ years (Age 21+)?\n\n*(All Drivri self-drive hires include 200 Miles daily, 8-hr daily rate capping, and comprehensive insurance cover).*`);
       return;
     }
 
@@ -528,7 +528,7 @@ async function handleHumanConversation(targetJid, incomingText) {
   }
 
   // 4. GENERAL CONSULTATIVE FALLBACK GREETING
-  await sendText(targetJid, `Hello! Welcome to Drivri Logistics & Globalline Customs. I'm your 24/7 Fleet & Compliance Advisor. 👋\n\nHow can I guide you today with our official UK services?\n• **Self-Drive Van Rentals** (SWB £108/d, MWB £144/d, LWB £168/d, Luton £192/d, Refrigerated £252/d)\n• **Verified Driver Allocations** (Cat B £25/h, Cat C1 £32/h, Cat C £28/h, Cat D1 £34/h, Cat C+E £30/h)\n• **UK CDS Customs Clearance** (£65.00 entry fee + VAT for LHR/LGW & UK ports)\n• **Multi-Carrier Parcel Couriers & Pallet Warehousing**\n\nTell me a bit about your requirement, and I'll guide you through our exact UK compliance and official rates!`);
+  await sendText(targetJid, `Hi there! Welcome to Drivri Logistics. 👋\n\nI'm here to help you get sorted with whatever you need today—whether that's renting a van, allocating a driver, handling UK customs clearance, or courier delivery.\n\nWhat are you looking to get done today? Let me know a few details and I'll guide you right through!`);
 }
 
 // INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE
@@ -941,7 +941,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Clean Express v5 routing & @s.whatsapp.net resolution active");
+  console.log("Warm, human-like conversational engine active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
