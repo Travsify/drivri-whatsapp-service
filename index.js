@@ -152,7 +152,7 @@ function getPayHtml() {
 }
 
 // -------------------------------------------------------------
-// EVOLUTION API WEBHOOK ENDPOINT FOR INSTANT INBOUND MESSAGES
+// EVOLUTION API UNIQUE WEBHOOK ENDPOINT FOR INSTANT INBOUND MESSAGES
 // -------------------------------------------------------------
 async function processIncomingRecord(record) {
   if (!record || !record.key || record.key.fromMe) return;
@@ -169,6 +169,20 @@ async function processIncomingRecord(record) {
 
   await handleHumanConversation(targetJid, incomingText);
 }
+
+app.all('/webhook/whatsapp-v2-live', async (req, res) => {
+  res.status(200).json({ status: 'success' });
+  try {
+    const body = req.body;
+    if (!body) return;
+    const data = body.data;
+    if (!data) return;
+    const record = Array.isArray(data) ? data[0] : (data.records ? data.records[0] : data);
+    await processIncomingRecord(record);
+  } catch (err) {
+    console.error('[WEBHOOK PROCESS ERROR]', err.message);
+  }
+});
 
 app.all('/webhook/whatsapp', async (req, res) => {
   res.status(200).json({ status: 'success' });
@@ -941,7 +955,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Warm, human-like conversational engine active");
+  console.log("Unique Webhook Route /webhook/whatsapp-v2-live Active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
