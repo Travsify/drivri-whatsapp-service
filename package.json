@@ -1,16 +1,16 @@
 {
   "name": "drivri-whatsapp-service",
-  "version": "1.1.0",
-  "description": "Drivri 24/7 WhatsApp AI Concierge, Lead Finder Dashboard & PDF Report Engine",
+  "version": "1.0.0",
+  "description": "Drivri WhatsApp Service & 24/7 AI Concierge Engine",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "express": "^4.19.2",
     "pdfkit": "^0.15.0"
   },
   "engines": {
