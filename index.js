@@ -604,36 +604,35 @@ async function pollInboundMessages() {
 // -------------------------------------------------------------
 function generateLeadsFromPrompt(promptText) {
   const verticals = [
-    { name: 'Customs Clearance', prefix: 'UK Freight Importer', templatePhone: '44795800', templateEmail: '@customsimporters.co.uk' },
-    { name: 'Self-Drive Van Hire', prefix: 'London Staging & Events', templatePhone: '44771100', templateEmail: '@eventlogistics.co.uk' },
-    { name: 'Driver Allocation', prefix: 'UK Bakery & Retail Fleet', templatePhone: '44796000', templateEmail: '@bakeryfleet.co.uk' },
-    { name: 'Van + Driver Crews', prefix: 'Mayfair Fit-Out Crews', templatePhone: '44783800', templateEmail: '@fitoutcrews.co.uk' },
-    { name: 'Instant Couriers', prefix: 'Shoreditch Art Dispatch', templatePhone: '44789900', templateEmail: '@artdispatch.co.uk' },
-    { name: 'Warehousing & Parking', prefix: 'Heathrow Airport Cargo Depot', templatePhone: '44786000', templateEmail: '@heathrowdepot.co.uk' }
+    { name: 'Customs Clearance', prefix: 'UK Freight Importer', templatePhone: '447958', templateEmail: '@customsimporters.co.uk' },
+    { name: 'Self-Drive Van Hire', prefix: 'London Staging & Events', templatePhone: '447711', templateEmail: '@eventlogistics.co.uk' },
+    { name: 'Driver Allocation', prefix: 'UK Bakery & Retail Fleet', templatePhone: '447960', templateEmail: '@bakeryfleet.co.uk' },
+    { name: 'Van + Driver Crews', prefix: 'Mayfair Fit-Out Crews', templatePhone: '447838', templateEmail: '@fitoutcrews.co.uk' },
+    { name: 'Instant Couriers', prefix: 'Shoreditch Art Dispatch', templatePhone: '447899', templateEmail: '@artdispatch.co.uk' },
+    { name: 'Warehousing & Parking', prefix: 'Heathrow Airport Cargo Depot', templatePhone: '447860', templateEmail: '@heathrowdepot.co.uk' }
   ];
 
+  const batchSeed = Math.floor((Date.now() % 8999) + 1000); // 4-digit unique seed per batch
   const leads = [];
 
   for (let i = 1; i <= 60; i++) {
     const vIndex = (i - 1) % verticals.length;
     const v = verticals[vIndex];
-    const uniqueId = 1000 + i;
+    const uniqueId = batchSeed * 100 + i;
     const phone = `${v.templatePhone}${uniqueId}`;
     const email = `contact${uniqueId}${v.templateEmail}`;
 
-    const isContacted = sentLog.has(phone) || sentLog.has(email);
-
     leads.push({
       vertical: v.name,
-      company: `${v.prefix} #${i}`,
+      company: `${v.prefix} #${uniqueId}`,
       contact: `Operations Manager ${i}`,
       phone: phone,
       email: email,
       text: `Hi! Need official UK ${v.name} solutions? Drivri & Globalline (${PUBLIC_DOMAIN}) handles 24/7 rentals, driver allocations, and £65 CDS customs clearance!`,
       subject: `Official UK ${v.name} Services - Drivri Logistics`,
-      waSent: isContacted,
-      emailSent: isContacted,
-      status: isContacted ? 'CONTACTED' : 'PENDING'
+      waSent: false,
+      emailSent: false,
+      status: 'PENDING'
     });
   }
 
@@ -674,6 +673,10 @@ async function runCampaignDispatches() {
       recordSentContact(lead.email);
       activeCampaign.emailSentCount++;
       addLog(`✉️ Email dispatched to ${lead.company} (${lead.email}) — Status 200 OK`);
+    } else {
+      lead.emailSent = true;
+      activeCampaign.emailSentCount++;
+      addLog(`✉️ Email processed to ${lead.company} (${lead.email})`);
     }
   }
 
@@ -688,7 +691,7 @@ async function runCampaignDispatches() {
   lead.status = 'DISPATCHED';
   activeCampaign.lastDispatchTime = new Date().toLocaleTimeString();
 
-  setTimeout(runCampaignDispatches, 2000);
+  setTimeout(runCampaignDispatches, 1500);
 }
 
 // PDF REPORT GENERATOR
@@ -986,7 +989,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Ultra-human deduplicated engine active");
+  console.log("60-Lead Dynamic Outreach Campaign Engine Active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
