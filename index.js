@@ -510,7 +510,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
 
     if (state.phase === 'QUOTE_PROPOSAL' && !lower.includes('ready') && !lower.includes('book') && !lower.includes('pay')) {
-      await sendText(targetJid, `Perfect! I can help you reserve a **${vanInfo.name}** (Payload: ${vanInfo.payload}, Volume: ${vanInfo.volume}). 🚛\n\nTo tailor your booking before we generate your quote, could you let me know:\n1. What date and pickup location/postcode do you need the van for?\n2. How long do you plan to hire it?\n3. Do you have a UK/EU Driving Licence held for 1+ years (Age 21+)?\n\n*(All Drivri self-drive hires include 200 Miles daily, 8-hr daily rate capping, and comprehensive insurance cover).*`);
+      await sendText(targetJid, `Awesome! I can definitely get you sorted with a van hire. 🚛\n\nTo recommend the best option and get you an accurate quote, could you share a few quick details?\n\n• What date and UK location/postcode do you need the van for?\n• How long do you need it for (hours or days)?\n• Roughly what type of move or cargo are you doing?\n\nOnce you let me know, I'll get your exact quote ready right away!`);
       return;
     }
 
@@ -955,7 +955,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Unique Webhook Route /webhook/whatsapp-v2-live Active");
+  console.log("Ultra-human conversational engine active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
