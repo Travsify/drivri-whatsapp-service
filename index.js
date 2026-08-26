@@ -600,8 +600,48 @@ async function pollInboundMessages() {
 }
 
 // -------------------------------------------------------------
-// DYNAMIC 60-LEAD PROMPT GENERATOR FOR UNCONTACTED UK BUSINESSES
+// ULTRA-HUMAN VERTICAL-TAILORED OUTREACH TEMPLATES
 // -------------------------------------------------------------
+function getHumanVerticalOutreach(verticalName, contactName) {
+  switch (verticalName) {
+    case 'Customs Clearance':
+      return {
+        text: `Hi ${contactName}! 👋 Hope your week is going well.\n\nI'm reaching out from Globalline & Drivri Logistics. We handle fast UK CDS import customs clearance at a fixed £65 fee with instant airport badge release at Heathrow, Gatwick, and UK sea ports.\n\nAre you currently bringing in any air or sea freight shipments that need smooth customs clearance?`,
+        subject: `Fast UK CDS Import Customs Clearance (£65 Fixed Fee) - Globalline Logistics`
+      };
+    case 'Self-Drive Van Hire':
+      return {
+        text: `Hi ${contactName}! 👋 Hope you're having a productive week.\n\nI'm reaching out from Drivri Logistics. We provide 24/7 self-drive van rentals across London (MWB, LWB, and Lutons with tail lifts) with 200 miles included daily.\n\nDo you have any upcoming events, productions, or moves that require extra van transport?`,
+        subject: `24/7 Self-Drive Van Rentals & Fleet Support - Drivri Logistics`
+      };
+    case 'Driver Allocation':
+      return {
+        text: `Hi ${contactName}! 👋 Hope all is well with you.\n\nI'm reaching out from Drivri Logistics. We supply experienced, DVLA-vetted delivery drivers (Cat B, C1, and Class 2 HGV) to cover driver shortages or extra delivery routes.\n\nAre you currently looking for extra drivers to support your fleet?`,
+        subject: `Verified Delivery Driver Allocations (Cat B, C1, HGV) - Drivri Logistics`
+      };
+    case 'Van + Driver Crews':
+      return {
+        text: `Hi ${contactName}! 👋 Hope your week is going great.\n\nQuick note from Drivri Logistics. We provide dedicated van + driver crew packages across London for staging, fit-outs, and commercial moves.\n\nWould you be open to keeping our details on hand for your next site move or delivery project?`,
+        subject: `Dedicated Van & Driver Crew Packages for London Projects - Drivri`
+      };
+    case 'Instant Couriers':
+      return {
+        text: `Hi ${contactName}! 👋 Hope you're well.\n\nQuick message from Drivri Logistics. We handle fast same-day courier dispatch and parcel shipping across London and the UK.\n\nLet me know if you ever need reliable courier cover or urgent parcel dispatch!`,
+        subject: `Same-Day Courier & Urgent Shipping Services - Drivri Logistics`
+      };
+    case 'Warehousing & Parking':
+      return {
+        text: `Hi ${contactName}! 👋 Hope you're having a good week.\n\nReaching out from Drivri Logistics. We provide commercial pallet storage near Heathrow Airport as well as secure fleet vehicle parking.\n\nLet me know if you're ever looking for extra pallet storage or fleet parking space!`,
+        subject: `Commercial Pallet Storage & Secure Fleet Parking - Drivri Logistics`
+      };
+    default:
+      return {
+        text: `Hi ${contactName}! 👋 Hope you're having a great week. Reaching out from Drivri Logistics—let us know if you ever need van rentals, driver allocations, or customs clearance support!`,
+        subject: `Logistics & Fleet Support Services - Drivri Logistics`
+      };
+  }
+}
+
 function generateLeadsFromPrompt(promptText) {
   const verticals = [
     { name: 'Customs Clearance', prefix: 'UK Freight Importer', templatePhone: '447958', templateEmail: '@customsimporters.co.uk' },
@@ -622,14 +662,16 @@ function generateLeadsFromPrompt(promptText) {
     const phone = `${v.templatePhone}${uniqueId}`;
     const email = `contact${uniqueId}${v.templateEmail}`;
 
+    const outreach = getHumanVerticalOutreach(v.name, `Manager ${i}`);
+
     leads.push({
       vertical: v.name,
       company: `${v.prefix} #${uniqueId}`,
       contact: `Operations Manager ${i}`,
       phone: phone,
       email: email,
-      text: `Hi! Need official UK ${v.name} solutions? Drivri & Globalline (${PUBLIC_DOMAIN}) handles 24/7 rentals, driver allocations, and £65 CDS customs clearance!`,
-      subject: `Official UK ${v.name} Services - Drivri Logistics`,
+      text: outreach.text,
+      subject: outreach.subject,
       waSent: false,
       emailSent: false,
       status: 'PENDING'
@@ -667,7 +709,7 @@ async function runCampaignDispatches() {
   const lead = pendingLeads[0];
 
   if (!lead.emailSent) {
-    const emailRes = await sendResendEmail(lead.email, lead.subject, `<div style="font-family:Arial;"><p>Dear ${lead.contact},</p><p>${lead.text}</p><p>Best regards,<br>Drivri Team</p></div>`);
+    const emailRes = await sendResendEmail(lead.email, lead.subject, `<div style="font-family:Arial;"><p>Dear ${lead.contact},</p><p>${lead.text.replace(/\n/g, '<br>')}</p><p>Best regards,<br>Drivri Team</p></div>`);
     if (emailRes.status === 200 || emailRes.status === 201) {
       lead.emailSent = true;
       recordSentContact(lead.email);
