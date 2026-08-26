@@ -151,6 +151,30 @@ function getPayHtml() {
   `;
 }
 
+// DEDUPLICATION GUARD: Check if we sent a response to targetJid in the last 15 seconds
+async function hasRecentReply(targetJid) {
+  try {
+    const res = await requestEvolution(`/chat/findMessages/${INSTANCE}`, 'POST', { page: 1, limit: 6 });
+    if (res.status === 200 && res.body && res.body.messages && Array.isArray(res.body.messages.records)) {
+      const records = res.body.messages.records;
+      const nowSec = Math.floor(Date.now() / 1000);
+      const cleanTarget = targetJid.split('@')[0];
+
+      for (const r of records) {
+        if (!r.key || !r.key.fromMe) continue;
+        const rJid = (r.key.remoteJidAlt || r.key.remoteJid || '').split('@')[0];
+        if (rJid === cleanTarget || (r.key.remoteJid && r.key.remoteJid.includes(cleanTarget))) {
+          const msgTime = r.messageTimestamp || 0;
+          if (nowSec - msgTime < 15) {
+            return true; // Already replied in the last 15 seconds!
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
 // -------------------------------------------------------------
 // EVOLUTION API UNIQUE WEBHOOK ENDPOINT FOR INSTANT INBOUND MESSAGES
 // -------------------------------------------------------------
@@ -166,6 +190,13 @@ async function processIncomingRecord(record) {
 
   let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
   console.log(`[INCOMING CUSTOMER MESSAGE] JID: ${targetJid} | Text: "${incomingText}"`);
+
+  // Check deduplication guard to ensure no double replies
+  const alreadyReplied = await hasRecentReply(targetJid);
+  if (alreadyReplied) {
+    console.log(`[DEDUPLICATION GUARD] Already sent response to ${targetJid} in last 15s. Skipping duplicate!`);
+    return;
+  }
 
   await handleHumanConversation(targetJid, incomingText);
 }
@@ -545,7 +576,7 @@ async function handleHumanConversation(targetJid, incomingText) {
   await sendText(targetJid, `Hi there! Welcome to Drivri Logistics. 👋\n\nI'm here to help you get sorted with whatever you need today—whether that's renting a van, allocating a driver, handling UK customs clearance, or courier delivery.\n\nWhat are you looking to get done today? Let me know a few details and I'll guide you right through!`);
 }
 
-// INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE
+// INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE & DEDUPLICATION
 async function pollInboundMessages() {
   try {
     const res = await requestEvolution(`/chat/findMessages/${INSTANCE}`, 'POST', { page: 1, limit: 15 });
@@ -955,7 +986,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("Ultra-human conversational engine active");
+  console.log("Ultra-human deduplicated engine active");
   console.log("==================================================");
 
   setInterval(pollInboundMessages, 4000);
