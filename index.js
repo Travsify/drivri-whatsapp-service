@@ -160,12 +160,12 @@ async function processIncomingRecord(record) {
   const targetJid = getCanonicalJid(record.key);
   let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
   
-  // COMPLETELY KILLED WHATSAPP BOT AUTO-RESPOND
-  console.log(`[AUTO-RESPOND DISABLED] Inbound message received from ${targetJid}: "${incomingText}". Auto-response is completely killed.`);
+  // ALL WHATSAPP RESPONSES COMPLETELY KILLED
+  console.log(`[WHATSAPP RESPONSES KILLED] Inbound message from ${targetJid}: "${incomingText}". All WhatsApp responses are completely killed.`);
 }
 
 app.all('/webhook/whatsapp-v2-live', async (req, res) => {
-  res.status(200).json({ status: 'success', autoRespond: false });
+  res.status(200).json({ status: 'success', whatsappRespondersKilled: true });
   try {
     const body = req.body;
     if (!body) return;
@@ -179,7 +179,7 @@ app.all('/webhook/whatsapp-v2-live', async (req, res) => {
 });
 
 app.all('/webhook/whatsapp', async (req, res) => {
-  res.status(200).json({ status: 'success', autoRespond: false });
+  res.status(200).json({ status: 'success', whatsappRespondersKilled: true });
   try {
     const body = req.body;
     if (!body) return;
@@ -270,57 +270,13 @@ const DRIVRI_KNOWLEDGE = {
 
 // EVOLUTION & STRIPE HELPERS
 function requestEvolution(urlPath, method = 'POST', data = {}) {
-  return new Promise((resolve) => {
-    try {
-      const url = new URL(urlPath, BASE_URL);
-      const options = {
-        hostname: url.hostname,
-        port: url.port,
-        path: url.pathname + url.search,
-        method: method,
-        timeout: 10000,
-        headers: {
-          'apikey': INSTANCE_KEY,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      if (data) {
-        options.headers['Content-Length'] = Buffer.byteLength(JSON.stringify(data));
-      }
-
-      const req = http.request(options, (res) => {
-        let body = '';
-        res.on('data', chunk => body += chunk);
-        res.on('end', () => {
-          try {
-            resolve({ status: res.statusCode, body: JSON.parse(body) });
-          } catch (e) {
-            resolve({ status: res.statusCode, body: body });
-          }
-        });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        resolve({ status: 504, body: {} });
-      });
-
-      req.on('error', err => resolve({ status: 500, error: err.message }));
-      if (data) req.write(JSON.stringify(data));
-      req.end();
-    } catch (err) {
-      resolve({ status: 500, error: err.message });
-    }
-  });
+  return Promise.resolve({ status: 200, disabled: true, message: 'All Evolution API WhatsApp dispatches killed' });
 }
 
+// MASTER OUTBOUND WHATSAPP KILL SWITCH: GUARANTEES 0 OUTBOUND MESSAGES SENT
 function sendText(targetJid, text) {
-  const cleanJid = targetJid.includes('@') ? targetJid.split('@')[0] : targetJid;
-  return requestEvolution(`/message/sendText/${INSTANCE}`, 'POST', {
-    number: cleanJid,
-    text: text
-  });
+  console.log(`[WHATSAPP MESSAGING KILLED] Outbound message attempt to ${targetJid} BLOCKED.`);
+  return Promise.resolve({ status: 200, disabled: true, message: 'All WhatsApp responses completely killed' });
 }
 
 function createStripeCheckoutSession(serviceName, amountPence, customerEmail, description = null) {
@@ -411,15 +367,14 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// WHATSAPP BOT AUTO-RESPOND: COMPLETELY DISABLED
+// ALL WHATSAPP RESPONSES & MESSAGING: COMPLETELY KILLED
 // -------------------------------------------------------------
 async function handleHumanConversation(targetJid, incomingText) {
-  console.log(`[AUTO-RESPOND DISABLED] Skipping response generation for ${targetJid}`);
+  console.log(`[WHATSAPP RESPONSES KILLED] Skipping response generation for ${targetJid}`);
   return;
 }
 
 async function pollInboundMessages() {
-  // COMPLETELY DISABLED INBOUND POLLING FOR AUTO-RESPOND
   return;
 }
 
@@ -512,29 +467,28 @@ function generateLeadsFromPrompt(promptText) {
   return leads;
 }
 
-// PACED CAMPAIGN DISPATCH ENGINE (5-MIN WHATSAPP PACING / 60S EMAIL PACING)
+// PACED CAMPAIGN DISPATCH ENGINE (EMAIL ONLY - WHATSAPP KILLED)
 async function runCampaignDispatches() {
   if (activeCampaign.status !== 'RUNNING') return;
 
-  const pendingLeads = activeCampaign.leads.filter(l => l.status === 'PENDING' || !l.waSent || !l.emailSent);
+  const pendingLeads = activeCampaign.leads.filter(l => l.status === 'PENDING' || !l.emailSent);
   if (pendingLeads.length === 0) {
     activeCampaign.status = 'COMPLETED';
-    addLog('🎉 All 60 fresh target leads processed and dispatched successfully!');
+    addLog('🎉 All target email leads processed and dispatched successfully! (WhatsApp responses completely killed)');
 
     const reportHtml = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
         <h2 style="color: #0d1b2a;">Drivri Campaign Execution Report</h2>
         <p><strong>Prompt:</strong> ${activeCampaign.prompt}</p>
         <p><strong>Total Fresh Leads:</strong> ${activeCampaign.totalLeadsFound}</p>
-        <p><strong>WhatsApp Dispatches (5-min pace):</strong> ${activeCampaign.waSentCount}</p>
         <p><strong>Email Dispatches (60s pace):</strong> ${activeCampaign.emailSentCount}</p>
+        <p><strong>WhatsApp Dispatches:</strong> KILLED (0 Sent)</p>
         <p><strong>Status:</strong> COMPLETED ✅</p>
         <hr>
         <p style="font-size: 12px; color: #666;">Download your complete PDF report from the Drivri Dashboard: ${PUBLIC_DOMAIN}</p>
       </div>
     `;
-    await sendResendEmail(DIRECTOR_EMAIL, `Drivri 60-Lead Campaign Execution Report - Completed`, reportHtml);
-    await sendText(DIRECTOR_PHONE, `📊 DRIVRI 60-LEAD CAMPAIGN COMPLETED!\n\nTotal Leads: ${activeCampaign.totalLeadsFound}\nWhatsApp Sent: ${activeCampaign.waSentCount}\nEmails Sent: ${activeCampaign.emailSentCount}\n\nPDF report available at ${PUBLIC_DOMAIN}`);
+    await sendResendEmail(DIRECTOR_EMAIL, `Drivri Campaign Execution Report - Completed`, reportHtml);
     return;
   }
 
@@ -549,20 +503,12 @@ async function runCampaignDispatches() {
     addLog(`✉️ Email dispatched to ${lead.company} (${lead.email}) — Status 200 OK (Paced 60s)`);
   }
 
-  // 2. Dispatch WhatsApp (Paced safely at 5 minutes / 300s to avoid bans!)
-  if (!lead.waSent) {
-    const waRes = await sendText(lead.phone, lead.text);
-    lead.waSent = true;
-    recordSentContact(lead.phone);
-    activeCampaign.waSentCount++;
-    addLog(`📲 WhatsApp dispatched to ${lead.company} (+${lead.phone}) — Paced at 5 Minutes`);
-  }
-
+  // 2. WhatsApp completely disabled
+  lead.waSent = false;
   lead.status = 'DISPATCHED';
   activeCampaign.lastDispatchTime = new Date().toLocaleTimeString();
 
-  // STRICT PACING: 5 MINUTES (300,000ms) PER DISPATCH STEP FOR WHATSAPP BAN PROTECTION
-  setTimeout(runCampaignDispatches, 300000);
+  setTimeout(runCampaignDispatches, 60000);
 }
 
 // PDF REPORT GENERATOR
@@ -588,7 +534,7 @@ app.get('/api/download-report-pdf', (req, res) => {
     doc.text(`Active Prompt: ${activeCampaign.prompt}`);
     doc.text(`Campaign Status: ${activeCampaign.status}`);
     doc.text(`Total Fresh Leads: ${activeCampaign.totalLeadsFound}`);
-    doc.text(`WhatsApp Messages Sent (5-min pace): ${activeCampaign.waSentCount}`);
+    doc.text(`WhatsApp Messaging Status: KILLED (0 Sent)`);
     doc.text(`Emails Dispatched: ${activeCampaign.emailSentCount}`);
     doc.moveDown(1.5);
 
@@ -599,7 +545,7 @@ app.get('/api/download-report-pdf', (req, res) => {
     
     doc.fontSize(8).fillColor('#444444');
     leads.forEach((l, index) => {
-      doc.text(`${index + 1}. [${l.vertical}] ${l.company} (${l.contact}) | WA: +${l.phone} | Email: ${l.email} | Status: ${l.status}`);
+      doc.text(`${index + 1}. [${l.vertical}] ${l.company} (${l.contact}) | Email: ${l.email} | Status: ${l.status}`);
       doc.moveDown(0.2);
     });
 
@@ -611,7 +557,7 @@ app.get('/api/download-report-pdf', (req, res) => {
 
 app.post('/api/generate-and-dispatch-leads', (req, res) => {
   const { prompt } = req.body;
-  const promptText = prompt || 'find 20 whatsapp leads accross all of our verticals and message them and send emails to 40 businesses';
+  const promptText = prompt || 'find 20 leads accross all of our verticals and send emails to 40 businesses';
 
   const leads = generateLeadsFromPrompt(promptText);
 
@@ -633,7 +579,7 @@ app.post('/api/generate-and-dispatch-leads', (req, res) => {
 
   res.json({
     success: true,
-    message: `60-Lead campaign initiated! Dispatched to ${leads.length} fresh UK business targets.`,
+    message: `Lead campaign initiated! Dispatched to ${leads.length} fresh UK business targets. (WhatsApp Messaging Killed)`,
     activeCampaign
   });
 });
@@ -664,7 +610,7 @@ app.get('/', (req, res) => {
           <div class="w-10 h-10 rounded-lg bg-cyan-500 flex items-center justify-center font-bold text-slate-900 text-xl">D</div>
           <div>
             <h1 class="text-xl font-bold tracking-wide text-white">Drivri 24/7 Fleet & Lead Control Center</h1>
-            <p class="text-xs text-cyan-400">Stripe Payments • Resend Invoicing • PDF Audit (WhatsApp Auto-Respond OFF)</p>
+            <p class="text-xs text-cyan-400">Stripe Payments • Resend Invoicing • PDF Audit (ALL WHATSAPP RESPONSES KILLED)</p>
           </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -682,29 +628,22 @@ app.get('/', (req, res) => {
         <section class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-700">
           <div class="flex items-center space-x-3 mb-4">
             <i class="fa-solid fa-wand-magic-sparkles text-cyan-400 text-xl"></i>
-            <h2 class="text-lg font-bold text-white">AI Lead Acquisition & Outreach Prompt Engine</h2>
+            <h2 class="text-lg font-bold text-white">AI Lead Acquisition & Email Outreach Prompt Engine</h2>
           </div>
           <form id="promptForm" class="space-y-4">
             <div>
-              <label class="block text-xs font-medium text-slate-400 mb-2">ENTER PROMPT TO FIND TARGET LEADS FOR WHATSAPP & EMAIL OUTREACH:</label>
-              <textarea id="promptInput" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-sm" placeholder="e.g. find 20 whatsapp leads accross all of our verticals and message them to use our service as per the vertical and also send emails to 40 businesses who need our services accross all of our service verticals..."></textarea>
-            </div>
-            
-            <div class="flex flex-wrap gap-2 text-xs">
-              <span class="text-slate-400 self-center">Presets:</span>
-              <button type="button" onclick="setPreset('find 20 whatsapp leads accross all of our verticals and message them to use our service as per the vertical and also send emails to 40 businesses who need our services accross all of our service verticals. Note fresh leads, never contacted, mever emailed and never whatsapp message sent to.')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">20 WA + 40 Email Campaign</button>
-              <button type="button" onclick="setPreset('Target dry food importers & customs clearance buyers at Heathrow Airport with CDS import offers')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">Heathrow Customs Clearance</button>
-              <button type="button" onclick="setPreset('Target event staging firms & florists needing self-drive van rentals and driver crews')" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-lg border border-slate-700">Van Hire & Driver Crews</button>
+              <label class="block text-xs font-medium text-slate-400 mb-2">ENTER PROMPT TO FIND TARGET LEADS FOR EMAIL OUTREACH:</label>
+              <textarea id="promptInput" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-sm" placeholder="e.g. find 60 business leads accross all of our service verticals and send email offers..."></textarea>
             </div>
 
             <div class="flex justify-between items-center pt-2">
               <div class="text-xs text-slate-400 flex items-center space-x-4">
-                <span><i class="fa-brands fa-whatsapp text-emerald-400"></i> WhatsApp: 5-min pace</span>
+                <span class="text-red-400"><i class="fa-brands fa-whatsapp mr-1"></i> WhatsApp Responses: KILLED</span>
                 <span><i class="fa-solid fa-envelope text-cyan-400"></i> Email: 60s pace (info@drivri.co.uk)</span>
               </div>
               <button type="submit" id="submitBtn" class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-900 font-bold px-6 py-3 rounded-xl shadow-lg transition flex items-center space-x-2 text-sm">
                 <i class="fa-solid fa-paper-plane"></i>
-                <span>Find Leads & Start Outreach Campaign</span>
+                <span>Find Leads & Start Email Outreach</span>
               </button>
             </div>
           </form>
@@ -717,9 +656,9 @@ app.get('/', (req, res) => {
             <div class="text-xs text-slate-500 mt-1">100% Uncontacted Targets</div>
           </div>
           <div class="glass-panel rounded-xl p-5 border border-slate-700">
-            <div class="text-xs text-slate-400 uppercase font-semibold">WhatsApp Messages Dispatched</div>
-            <div id="statWaSent" class="text-3xl font-extrabold text-emerald-400 mt-2">0</div>
-            <div class="text-xs text-emerald-500/80 mt-1">Paced at 5 Minutes</div>
+            <div class="text-xs text-slate-400 uppercase font-semibold">WhatsApp Status</div>
+            <div class="text-3xl font-extrabold text-red-500 mt-2">KILLED</div>
+            <div class="text-xs text-red-400 mt-1">All Messaging Blocked</div>
           </div>
           <div class="glass-panel rounded-xl p-5 border border-slate-700">
             <div class="text-xs text-slate-400 uppercase font-semibold">Emails Dispatched</div>
@@ -749,7 +688,7 @@ app.get('/', (req, res) => {
                   <tr>
                     <th class="p-3">Company & Contact</th>
                     <th class="p-3">Vertical</th>
-                    <th class="p-3">WhatsApp / Email</th>
+                    <th class="p-3">Email Address</th>
                     <th class="p-3">Status</th>
                   </tr>
                 </thead>
@@ -768,7 +707,7 @@ app.get('/', (req, res) => {
               <span>Live Dispatch Logs</span>
             </h3>
             <div id="terminalLogs" class="bg-slate-950 font-mono text-xs text-emerald-400 p-4 rounded-xl h-96 overflow-y-auto space-y-2 border border-slate-800">
-              <div class="text-slate-500">[SYSTEM READY] Awaiting prompt execution...</div>
+              <div class="text-slate-500">[SYSTEM READY] WhatsApp Responses Completely Killed...</div>
             </div>
           </div>
         </div>
@@ -801,7 +740,7 @@ app.get('/', (req, res) => {
             alert('Error starting campaign: ' + err.message);
           } finally {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Find Leads & Start Outreach Campaign</span>';
+            btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i><span>Find Leads & Start Outreach</span>';
           }
         });
 
@@ -811,7 +750,6 @@ app.get('/', (req, res) => {
             const data = await res.json();
 
             document.getElementById('statTotalLeads').innerText = data.totalLeadsFound || 0;
-            document.getElementById('statWaSent').innerText = data.waSentCount || 0;
             document.getElementById('statEmailSent').innerText = data.emailSentCount || 0;
             document.getElementById('statStatus').innerText = data.status || 'IDLE';
             document.getElementById('statLastTime').innerText = data.lastDispatchTime ? 'Last dispatch: ' + data.lastDispatchTime : 'Ready for Prompt';
@@ -833,8 +771,7 @@ app.get('/', (req, res) => {
                     <span class="px-2 py-1 rounded bg-cyan-500/10 text-cyan-400 text-xs font-semibold">\${l.vertical}</span>
                   </td>
                   <td class="p-3 text-slate-300">
-                    <div><i class="fa-brands fa-whatsapp text-emerald-400 mr-1"></i>+\${l.phone}</div>
-                    <div class="text-slate-500"><i class="fa-solid fa-envelope mr-1"></i>\${l.email}</div>
+                    <div class="text-slate-300"><i class="fa-solid fa-envelope mr-1"></i>\${l.email}</div>
                   </td>
                   <td class="p-3">
                     <span class="px-2 py-1 rounded text-xs font-bold \${l.status === 'DISPATCHED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-yellow-500/20 text-yellow-400'}">
@@ -856,10 +793,10 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-// START EXPRESS SERVER (WHATSAPP AUTO-RESPOND DISABLED)
+// START EXPRESS SERVER (ALL WHATSAPP MESSAGING KILLED)
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("WHATSAPP BOT AUTO-RESPOND: COMPLETELY KILLED");
+  console.log("ALL WHATSAPP RESPONSES & MESSAGING: COMPLETELY KILLED");
   console.log("==================================================");
 });
