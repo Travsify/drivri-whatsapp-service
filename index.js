@@ -448,104 +448,96 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// STRICT DATA-TRAINED HUMAN-LIKE CONVERSATIONAL ENGINE
+// 100% NATURAL HUMAN-LIKE CONVERSATIONAL DESK AGENT ENGINE
 // -------------------------------------------------------------
 async function handleHumanConversation(targetJid, incomingText) {
   const text = incomingText.trim();
   const lower = text.toLowerCase();
 
   let state = customerMemory.get(targetJid) || {
-    phase: 'GREETED',
-    greetingCount: 0,
+    messagesCount: 0,
     service: null,
     email: '',
-    emailConfirmed: false,
     postcode: '',
-    hireDate: '',
     vanCategory: 'medium'
   };
 
-  const isSimpleGreeting = lower === 'hi' || lower === 'hello' || lower === 'hey' || lower === 'good morning' || lower === 'good afternoon' || lower === 'hi there';
+  state.messagesCount++;
 
   const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) {
-    state.email = emailMatch[0];
-  }
+  if (emailMatch) state.email = emailMatch[0];
 
   const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
-  // 1. SIMPLE GREETING HANDLER (WARM, HUMAN, CONVERSATIONAL - NO SALES PITCH OR PRICE DUMPS)
-  if (isSimpleGreeting) {
-    state.greetingCount++;
+  // 1. REPEAT / GLITCH INQUIRIES ("why is this repeating", "stop repeating", "why repeated", "is not good")
+  if (lower.includes('repeat') || lower.includes('repeating') || lower.includes('not good') || lower.includes('glitch') || lower.includes('again')) {
     customerMemory.set(targetJid, state);
-
-    if (state.service) {
-      const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
-      await sendText(targetJid, `Hello again! 👋 Great to hear from you.\n\nWere you looking to proceed with your **${state.service === 'CUSTOMS' ? 'UK CDS Customs Clearance' : vanInfo.name}** booking, or did you need assistance with another service today?\n\nFeel free to let me know your pickup date, postcode, or cargo details!`);
-      return;
-    }
-
-    if (state.greetingCount > 1) {
-      await sendText(targetJid, `Hello again! 👋 I'm right here whenever you're ready.\n\nJust let me know what you're looking for (van rental, driver allocation, customs clearance, or couriers) and I'll be glad to help you out!`);
-      return;
-    }
-
-    await sendText(targetJid, `Hi there! Welcome to Drivri Logistics. 👋\n\nI'm here to help you get sorted with whatever you need today—whether that's renting a van, allocating a driver, handling UK customs clearance, or courier deliveries.\n\nWhat are you looking to get done today? Let me know a few details and I'll guide you right through!`);
+    await sendText(targetJid, `Ah, really sorry about that! 👋 Had a quick network delay on our desk system. I'm right here now—what can I help you get sorted today?`);
     return;
   }
 
-  // 2. CUSTOMS CLEARANCE FLOW
-  if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
-    state.service = 'CUSTOMS';
-
-    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
-      state.phase = 'CONFIRMED_PAYMENT';
-    } else if (state.phase === 'GREETED' || state.phase === 'DISCOVERY') {
-      state.phase = 'QUOTE_PROPOSAL';
-    }
+  // 2. TIMELINE / SCHEDULE QUESTIONS ("when today", "what time", "when will it arrive", "how soon")
+  if (lower.includes('when today') || lower.includes('what time') || lower.includes('when will') || lower.includes('how soon') || lower.includes('delivery time')) {
     customerMemory.set(targetJid, state);
+    await sendText(targetJid, `We can arrange that for you today! What specific time or UK location/postcode works best for you?`);
+    return;
+  }
 
-    if (state.phase === 'QUOTE_PROPOSAL') {
-      await sendText(targetJid, `Got it! I can certainly take care of your UK CDS Customs Clearance for London Heathrow (LHR), Gatwick, Manchester, or any UK port. 🛃\n\nTo make sure we have everything set up properly, could you share:\n1. Is your cargo arriving via Air Freight or Sea Container?\n2. Do you have a GB EORI Number registered?\n3. What email address should we send your official invoice to?\n\nOur fixed clearance rate is **£65.00 + 20% VAT (£78.00 Gross)** including fast airport badge release!`);
+  // 3. SHORT ACKNOWLEDGMENTS ("ok", "ones is okay", "sure", "thanks", "got it")
+  if (lower === 'ok' || lower === 'okay' || lower === 'ones is okay' || lower === 'one\'s is okay' || lower === 'sure' || lower === 'thanks' || lower === 'got it') {
+    customerMemory.set(targetJid, state);
+    if (state.messagesCount > 1) {
+      await sendText(targetJid, `Perfect! Let me know your pickup date, postcode, or what you'd like to get booked in, and I'll take care of it right away.`);
       return;
     }
+  }
 
-    if (state.phase === 'CONFIRMED_PAYMENT') {
+  // 4. ONGOING CHAT: IF ALREADY IN DIALOGUE, NEVER REPEAT CANNED GREETING!
+  const isSimpleGreeting = lower === 'hi' || lower === 'hello' || lower === 'hey' || lower === 'good morning' || lower === 'good afternoon' || lower === 'hi there';
+
+  if (isSimpleGreeting) {
+    customerMemory.set(targetJid, state);
+    if (state.messagesCount > 1) {
+      await sendText(targetJid, `Hi! 👋 I'm right here. How can I help you today?`);
+      return;
+    }
+    await sendText(targetJid, `Hi there! 👋 Welcome to Drivri Logistics. I'm Alex from customer operations. What are you looking to get done today?`);
+    return;
+  }
+
+  // 5. CUSTOMS CLEARANCE FLOW
+  if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
+    state.service = 'CUSTOMS';
+    customerMemory.set(targetJid, state);
+
+    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
       const totalGBP = DRIVRI_KNOWLEDGE.customsClearance.grossFee;
       const stripeRes = await createStripeCheckoutSession('UK CDS Import Customs Declaration', totalGBP * 100, state.email);
       const stripeUrl = stripeRes.url || `${PUBLIC_DOMAIN}/pay.html`;
       await sendText(DIRECTOR_PHONE, `🚨 CUSTOMS CLEARANCE DEAL CLOSED!\n\nCustomer: ${targetJid}\nText: "${incomingText}"\nEmail: ${state.email || 'Pending'}\nPay URL: ${stripeUrl}`);
 
-      let emailNotice = (state.email && state.emailConfirmed) ? `\n\nI've dispatched your official pro-forma invoice to ${state.email}.` : (state.email ? `\n\nWould you like me to send your official PDF invoice to **${state.email}**?` : `\n\nReply with your email address to receive your PDF receipt!`);
-      await sendText(targetJid, `Excellent! Everything is set for your Drivri UK CDS Customs Clearance. 🛃\n\n📊 DRIVRI OFFICIAL ENTRY BREAKDOWN (Inc. 20% UK VAT):\n• UK CDS Declaration Entry: £65.00\n• 20% UK VAT: £13.00\n• Total Amount Payable: £78.00 GBP\n• Included: Fast Airport Badge Release & EORI Clearance\n\n💳 SECURE STRIPE RESERVATION LINK:\n👉 Complete Reservation: ${stripeUrl}${emailNotice}\n\nFeel free to attach your Commercial Invoice or MAWB PDF here in chat to start instant clearance!`);
+      await sendText(targetJid, `Great! Here is your official clearance link for UK CDS Customs Entry (£65 + 20% VAT = £78.00 Gross):\n👉 ${stripeUrl}\n\nYou can also attach your commercial invoice or MAWB PDF right here!`);
       return;
     }
+
+    await sendText(targetJid, `I can handle your UK CDS Customs Clearance for Heathrow, Gatwick, or sea ports! Fixed rate is £65 + 20% VAT (£78.00 Gross) with instant airport badge release. Is your cargo arriving via Air or Sea?`);
+    return;
   }
 
-  // 3. VAN HIRE FLOW (Medium, Luton, Small, Large, Refrigerated)
+  // 6. VAN HIRE FLOW
   if (lower.includes('van') || lower.includes('luton') || lower.includes('medium') || lower.includes('small') || lower.includes('large') || lower.includes('refrigerated') || lower.includes('hire') || lower.includes('rent')) {
     state.service = 'VAN_HIRE';
-    if (lower.includes('medium') || lower.includes('mwb')) state.vanCategory = 'medium';
-    else if (lower.includes('luton')) state.vanCategory = 'luton';
+    if (lower.includes('luton')) state.vanCategory = 'luton';
     else if (lower.includes('large') || lower.includes('lwb')) state.vanCategory = 'large';
     else if (lower.includes('small') || lower.includes('swb')) state.vanCategory = 'small';
     else if (lower.includes('refrigerated')) state.vanCategory = 'refrigerated';
+    else state.vanCategory = 'medium';
 
-    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
-      state.phase = 'CONFIRMED_PAYMENT';
-    } else if (state.phase === 'GREETED' || state.phase === 'DISCOVERY') {
-      state.phase = 'QUOTE_PROPOSAL';
-    }
     customerMemory.set(targetJid, state);
 
     const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
 
-    if (state.phase === 'QUOTE_PROPOSAL' && !lower.includes('ready') && !lower.includes('book') && !lower.includes('pay')) {
-      await sendText(targetJid, `Awesome! I can definitely get you sorted with a van hire. 🚛\n\nTo recommend the best option and get you an accurate quote, could you share a few quick details?\n\n• What date and UK location/postcode do you need the van for?\n• How long do you need it for (hours or days)?\n• Roughly what type of move or cargo are you doing?\n\nOnce you let me know, I'll get your exact quote ready right away!`);
-      return;
-    }
-
-    if (state.phase === 'CONFIRMED_PAYMENT' || lower.includes('ready') || lower.includes('book') || lower.includes('pay')) {
+    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
       const vanNetGBP = vanInfo.dailyCap8h;
       const insuranceNetGBP = DRIVRI_KNOWLEDGE.insurance.comprehensive.dailyCap;
       const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
@@ -554,26 +546,22 @@ async function handleHumanConversation(targetJid, incomingText) {
 
       const standardDepositAmount = 200;
       const option1TotalPence = (totalGrossGBP + standardDepositAmount) * 100;
-      const zeroDepositFeeGBP = totalGrossGBP * 0.25;
-      const option2TotalPence = (totalGrossGBP + zeroDepositFeeGBP) * 100;
-
       const stripeRes1 = await createStripeCheckoutSession(`${vanInfo.name} Self-Drive + £${standardDepositAmount} Deposit`, option1TotalPence, state.email);
       const stripeUrl1 = stripeRes1.url || `${PUBLIC_DOMAIN}/pay.html`;
 
-      const stripeRes2 = await createStripeCheckoutSession(`${vanInfo.name} Self-Drive + 25% Zero-Deposit Fee`, option2TotalPence, state.email);
-      const stripeUrl2 = stripeRes2.url || `${PUBLIC_DOMAIN}/pay.html`;
+      await sendText(DIRECTOR_PHONE, `🚨 DRIVRI VAN HIRE BOOKING CLOSED!\n\nVehicle: ${vanInfo.name}\nCustomer: ${targetJid}\nGross Rental: £${totalGrossGBP.toFixed(2)}\nPay URL: ${stripeUrl1}`);
 
-      await sendText(DIRECTOR_PHONE, `🚨 DRIVRI VAN HIRE BOOKING CLOSED!\n\nVehicle: ${vanInfo.name}\nCustomer: ${targetJid}\nGross Rental: £${totalGrossGBP.toFixed(2)}\nOption 1: ${stripeUrl1}\nOption 2: ${stripeUrl2}`);
-
-      let emailNotice = (state.email && state.emailConfirmed) ? `\n\nI've dispatched your official pro-forma invoice to ${state.email}.` : (state.email ? `\n\nWould you like me to send your official invoice breakdown to **${state.email}**?` : `\n\nReply with your email address if you'd like your PDF invoice sent to your inbox!`);
-
-      await sendText(targetJid, `Here is your official itemized quote for ${vanInfo.name} (24 Hours Rental):\n\n📊 DRIVRI OFFICIAL BREAKDOWN (Inc. 20% UK VAT):\n• ${vanInfo.name} (8-hr capped daily rate): £${vanNetGBP.toFixed(2)}\n• Comprehensive Self-Drive Cover: £${insuranceNetGBP.toFixed(2)}\n• 20% UK VAT: £${vatAmountGBP.toFixed(2)}\n• Total Gross Rental: £${totalGrossGBP.toFixed(2)}\n• Included Allowance: 200 Miles Daily (£0.60/mile on excess miles)\n\n💳 IN-CHAT STRIPE PAYMENT LINKS:\n\n👉 OPTION 1 (Standard Refundable Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + £${standardDepositAmount} Refundable Deposit:\nPay via Stripe: ${stripeUrl1}\n\n👉 OPTION 2 (Zero Security Deposit):\nRental Gross (£${totalGrossGBP.toFixed(2)}) + 25% Waiver Fee (£${zeroDepositFeeGBP.toFixed(2)}):\nPay via Stripe: ${stripeUrl2}\n\n🔒 MANDATORY COMPLYCUBE ID CHECK:\nComplete your DVLA & ID check to activate vehicle release:\n👉 Verify ID: ${complyCubeLink}${emailNotice}\n\nCall line: ${SUPPORT_PHONE}.`);
+      await sendText(targetJid, `Here is your booking link for ${vanInfo.name} (£${totalGrossGBP.toFixed(2)} total gross rental + £${standardDepositAmount} deposit):\n👉 Complete Reservation: ${stripeUrl1}\n\nID Verification: ${complyCubeLink}`);
       return;
     }
+
+    await sendText(targetJid, `I can get you set up with a ${vanInfo.name}! What date and UK postcode/location do you need it for?`);
+    return;
   }
 
-  // 4. GENERAL CONSULTATIVE FALLBACK GREETING
-  await sendText(targetJid, `Hi there! Welcome to Drivri Logistics. 👋\n\nI'm here to help you get sorted with whatever you need today—whether that's renting a van, allocating a driver, handling UK customs clearance, or courier delivery.\n\nWhat are you looking to get done today? Let me know a few details and I'll guide you right through!`);
+  // 7. NATURAL HUMAN DESK FALLBACK (NO REPETITIVE BROADCASTS!)
+  customerMemory.set(targetJid, state);
+  await sendText(targetJid, `Got it! Let me know a few more details or your postcode and I'll get that sorted for you right away.`);
 }
 
 // INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE & DEDUPLICATION
