@@ -151,58 +151,21 @@ function getPayHtml() {
   `;
 }
 
-// DEDUPLICATION GUARD: Check if we sent a response to targetJid in the last 15 seconds
-async function hasRecentReply(targetJid) {
-  try {
-    const res = await requestEvolution(`/chat/findMessages/${INSTANCE}`, 'POST', { page: 1, limit: 6 });
-    if (res.status === 200 && res.body && res.body.messages && Array.isArray(res.body.messages.records)) {
-      const records = res.body.messages.records;
-      const nowSec = Math.floor(Date.now() / 1000);
-      const cleanTarget = targetJid.split('@')[0];
-
-      for (const r of records) {
-        if (!r.key || !r.key.fromMe) continue;
-        const rJid = (r.key.remoteJidAlt || r.key.remoteJid || '').split('@')[0];
-        if (rJid === cleanTarget || (r.key.remoteJid && r.key.remoteJid.includes(cleanTarget))) {
-          const msgTime = r.messageTimestamp || 0;
-          if (nowSec - msgTime < 15) {
-            return true; // Already replied in the last 15 seconds!
-          }
-        }
-      }
-    }
-  } catch (e) {}
-  return false;
-}
-
 // -------------------------------------------------------------
 // EVOLUTION API UNIQUE WEBHOOK ENDPOINT FOR INSTANT INBOUND MESSAGES
 // -------------------------------------------------------------
 async function processIncomingRecord(record) {
   if (!record || !record.key || record.key.fromMe) return;
 
-  const msgId = record.key.id;
-  if (answeredMessageIds.has(msgId)) return;
-  answeredMessageIds.add(msgId);
-
   const targetJid = getCanonicalJid(record.key);
-  if (!targetJid || targetJid.includes('@g.us')) return;
-
   let incomingText = record.message?.conversation || record.message?.extendedTextMessage?.text || 'Hello';
-  console.log(`[INCOMING CUSTOMER MESSAGE] JID: ${targetJid} | Text: "${incomingText}"`);
-
-  // Check deduplication guard to ensure no double replies
-  const alreadyReplied = await hasRecentReply(targetJid);
-  if (alreadyReplied) {
-    console.log(`[DEDUPLICATION GUARD] Already sent response to ${targetJid} in last 15s. Skipping duplicate!`);
-    return;
-  }
-
-  await handleHumanConversation(targetJid, incomingText);
+  
+  // COMPLETELY KILLED WHATSAPP BOT AUTO-RESPOND
+  console.log(`[AUTO-RESPOND DISABLED] Inbound message received from ${targetJid}: "${incomingText}". Auto-response is completely killed.`);
 }
 
 app.all('/webhook/whatsapp-v2-live', async (req, res) => {
-  res.status(200).json({ status: 'success' });
+  res.status(200).json({ status: 'success', autoRespond: false });
   try {
     const body = req.body;
     if (!body) return;
@@ -216,7 +179,7 @@ app.all('/webhook/whatsapp-v2-live', async (req, res) => {
 });
 
 app.all('/webhook/whatsapp', async (req, res) => {
-  res.status(200).json({ status: 'success' });
+  res.status(200).json({ status: 'success', autoRespond: false });
   try {
     const body = req.body;
     if (!body) return;
@@ -448,217 +411,16 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// DYNAMIC OPEN-GROUND / OPEN-ROUTER / FREE AI MODEL INTEGRATION
-// -------------------------------------------------------------
-async function callLLMBrain(history, incomingText) {
-  const apiKey = process.env.OPEN_GROUND_API_KEY || process.env.OPENROUTER_API_KEY || process.env.FREE_AI_API_KEY || process.env.OPENAI_API_KEY;
-  const baseUrl = process.env.AI_BASE_URL || (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1/chat/completions' : (process.env.OPEN_GROUND_API_KEY ? 'https://api.openground.ai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'));
-  const modelName = process.env.AI_MODEL || 'openrouter/free';
-
-  if (!apiKey) return null;
-
-  const systemPrompt = `You are Alex, a senior customer operations manager at Drivri Logistics & Globalline Customs in London. You communicate via WhatsApp.
-You are 100% human, polite, warm, professional, and clear.
-Respond directly to whatever the user said or asked.
-Keep responses concise (1 to 3 short sentences maximum).
-Never send canned broadcasts, marketing price dumps, or robotic greetings.
-Key Business Knowledge:
-- Van Hire: SWB (£18/h, £108/d), MWB (£24/h, £144/d), LWB (£28/h, £168/d), Luton (£32/h, £192/d), Refrigerated (£42/h, £252/d). Includes 200 miles daily.
-- Driver Allocation: Cat B (£25/h), Cat C1 (£32/h), Cat C HGV (£28/h), Cat D1 (£34/h), Cat C+E (£30/h).
-- UK Customs Clearance: CDS Import declarations fixed at £65 + 20% VAT (£78 Gross) for Heathrow, Gatwick, sea ports with instant airport badge release.
-- Support Phone: +44 7988 599 326. Email: info@drivri.co.uk.`;
-
-  return new Promise((resolve) => {
-    try {
-      const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: incomingText }];
-      const postData = JSON.stringify({ model: modelName, messages, max_tokens: 150 });
-      const url = new URL(baseUrl);
-
-      const req = https.request({
-        hostname: url.hostname,
-        port: 443,
-        path: url.pathname + url.search,
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(postData)
-        }
-      }, res => {
-        let body = ''; res.on('data', c => body += c);
-        res.on('end', () => {
-          try {
-            const parsed = JSON.parse(body);
-            if (parsed.choices && parsed.choices[0] && parsed.choices[0].message) {
-              resolve(parsed.choices[0].message.content.trim());
-            } else { resolve(null); }
-          } catch(e) { resolve(null); }
-        });
-      });
-      req.on('error', () => resolve(null));
-      req.write(postData);
-      req.end();
-    } catch(e) { resolve(null); }
-  });
-}
-
-// -------------------------------------------------------------
-// 100% HUMAN CONVERSATIONAL DESK AGENT ENGINE
+// WHATSAPP BOT AUTO-RESPOND: COMPLETELY DISABLED
 // -------------------------------------------------------------
 async function handleHumanConversation(targetJid, incomingText) {
-  const text = incomingText.trim();
-  const lower = text.toLowerCase();
-
-  let state = customerMemory.get(targetJid) || {
-    messagesCount: 0,
-    history: [],
-    service: null,
-    email: '',
-    postcode: '',
-    vanCategory: 'medium'
-  };
-
-  state.messagesCount++;
-
-  const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-  if (emailMatch) state.email = emailMatch[0];
-
-  const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
-
-  // Try LLM API first (OpenGround / OpenRouter / Free AI models)
-  const llmReply = await callLLMBrain(state.history, text);
-  if (llmReply) {
-    state.history.push({ role: 'user', content: text });
-    state.history.push({ role: 'assistant', content: llmReply });
-    if (state.history.length > 10) state.history.splice(0, 2);
-    customerMemory.set(targetJid, state);
-    await sendText(targetJid, llmReply);
-    return;
-  }
-
-  // 1. REPEAT / GLITCH INQUIRIES ("why is this repeating", "stop repeating", "why repeated", "is not good")
-  if (lower.includes('repeat') || lower.includes('repeating') || lower.includes('not good') || lower.includes('glitch') || lower.includes('again')) {
-    customerMemory.set(targetJid, state);
-    await sendText(targetJid, `Ah, really sorry about that! 👋 Had a temporary network delay on our desk system. I'm right here now—what can I help you get sorted today?`);
-    return;
-  }
-
-  // 2. COMPANY INFO INQUIRIES ("company info", "who are you", "what company", "may i know your company")
-  if (lower.includes('company info') || lower.includes('who are you') || lower.includes('what company') || lower.includes('may i know your company') || lower.includes('tell me about')) {
-    customerMemory.set(targetJid, state);
-    await sendText(targetJid, `We are Drivri Logistics & Globalline Customs, based in London! We handle 24/7 self-drive van rentals, driver allocations, and UK CDS customs clearance (£65 fixed fee). What can I get sorted for you today?`);
-    return;
-  }
-
-  // 3. TIMELINE / SCHEDULE QUESTIONS ("when today", "what time", "when will it arrive", "how soon")
-  if (lower.includes('when today') || lower.includes('what time') || lower.includes('when will') || lower.includes('how soon') || lower.includes('delivery time')) {
-    customerMemory.set(targetJid, state);
-    await sendText(targetJid, `We can arrange that for you today! What specific time or UK location/postcode works best for you?`);
-    return;
-  }
-
-  // 4. SHORT ACKNOWLEDGMENTS ("ok", "ones is okay", "sure", "thanks", "got it")
-  if (lower === 'ok' || lower === 'okay' || lower === 'ones is okay' || lower === 'one\'s is okay' || lower === 'sure' || lower === 'thanks' || lower === 'got it') {
-    customerMemory.set(targetJid, state);
-    if (state.messagesCount > 1) {
-      await sendText(targetJid, `Perfect! Let me know your pickup date, postcode, or what you'd like to get booked in, and I'll take care of it right away.`);
-      return;
-    }
-  }
-
-  // 5. ONGOING CHAT: IF ALREADY IN DIALOGUE, NEVER REPEAT CANNED GREETING!
-  const isSimpleGreeting = lower === 'hi' || lower === 'hello' || lower === 'hey' || lower === 'good morning' || lower === 'good afternoon' || lower === 'hi there';
-
-  if (isSimpleGreeting) {
-    customerMemory.set(targetJid, state);
-    if (state.messagesCount > 1) {
-      await sendText(targetJid, `Hi! 👋 I'm right here. How can I help you today?`);
-      return;
-    }
-    await sendText(targetJid, `Hi there! 👋 Welcome to Drivri Logistics. I'm Alex from customer operations. What are you looking to get done today?`);
-    return;
-  }
-
-  // 6. CUSTOMS CLEARANCE FLOW
-  if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
-    state.service = 'CUSTOMS';
-    customerMemory.set(targetJid, state);
-
-    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
-      const totalGBP = DRIVRI_KNOWLEDGE.customsClearance.grossFee;
-      const stripeRes = await createStripeCheckoutSession('UK CDS Import Customs Declaration', totalGBP * 100, state.email);
-      const stripeUrl = stripeRes.url || `${PUBLIC_DOMAIN}/pay.html`;
-      await sendText(DIRECTOR_PHONE, `🚨 CUSTOMS CLEARANCE DEAL CLOSED!\n\nCustomer: ${targetJid}\nText: "${incomingText}"\nEmail: ${state.email || 'Pending'}\nPay URL: ${stripeUrl}`);
-
-      await sendText(targetJid, `Great! Here is your official clearance link for UK CDS Customs Entry (£65 + 20% VAT = £78.00 Gross):\n👉 ${stripeUrl}\n\nYou can also attach your commercial invoice or MAWB PDF right here!`);
-      return;
-    }
-
-    await sendText(targetJid, `I can handle your UK CDS Customs Clearance for Heathrow, Gatwick, or sea ports! Fixed rate is £65 + 20% VAT (£78.00 Gross) with instant airport badge release. Is your cargo arriving via Air or Sea?`);
-    return;
-  }
-
-  // 7. VAN HIRE FLOW
-  if (lower.includes('van') || lower.includes('luton') || lower.includes('medium') || lower.includes('small') || lower.includes('large') || lower.includes('refrigerated') || lower.includes('hire') || lower.includes('rent')) {
-    state.service = 'VAN_HIRE';
-    if (lower.includes('luton')) state.vanCategory = 'luton';
-    else if (lower.includes('large') || lower.includes('lwb')) state.vanCategory = 'large';
-    else if (lower.includes('small') || lower.includes('swb')) state.vanCategory = 'small';
-    else if (lower.includes('refrigerated')) state.vanCategory = 'refrigerated';
-    else state.vanCategory = 'medium';
-
-    customerMemory.set(targetJid, state);
-
-    const vanInfo = DRIVRI_KNOWLEDGE.vanRental[state.vanCategory] || DRIVRI_KNOWLEDGE.vanRental.medium;
-
-    if (lower.includes('ready') || lower.includes('book') || lower.includes('pay') || lower.includes('send link') || lower.includes('confirm')) {
-      const vanNetGBP = vanInfo.dailyCap8h;
-      const insuranceNetGBP = DRIVRI_KNOWLEDGE.insurance.comprehensive.dailyCap;
-      const netSubtotalGBP = vanNetGBP + insuranceNetGBP;
-      const vatAmountGBP = netSubtotalGBP * DRIVRI_KNOWLEDGE.vatRate;
-      const totalGrossGBP = netSubtotalGBP + vatAmountGBP;
-
-      const standardDepositAmount = 200;
-      const option1TotalPence = (totalGrossGBP + standardDepositAmount) * 100;
-      const stripeRes1 = await createStripeCheckoutSession(`${vanInfo.name} Self-Drive + £${standardDepositAmount} Deposit`, option1TotalPence, state.email);
-      const stripeUrl1 = stripeRes1.url || `${PUBLIC_DOMAIN}/pay.html`;
-
-      await sendText(DIRECTOR_PHONE, `🚨 DRIVRI VAN HIRE BOOKING CLOSED!\n\nVehicle: ${vanInfo.name}\nCustomer: ${targetJid}\nGross Rental: £${totalGrossGBP.toFixed(2)}\nPay URL: ${stripeUrl1}`);
-
-      await sendText(targetJid, `Here is your booking link for ${vanInfo.name} (£${totalGrossGBP.toFixed(2)} total gross rental + £${standardDepositAmount} deposit):\n👉 Complete Reservation: ${stripeUrl1}\n\nID Verification: ${complyCubeLink}`);
-      return;
-    }
-
-    await sendText(targetJid, `I can get you set up with a ${vanInfo.name}! What date and UK postcode/location do you need it for?`);
-    return;
-  }
-
-  // 8. NATURAL HUMAN DESK FALLBACK
-  customerMemory.set(targetJid, state);
-  await sendText(targetJid, `Got it! Let me know a few more details or your postcode and I'll get that sorted for you right away.`);
+  console.log(`[AUTO-RESPOND DISABLED] Skipping response generation for ${targetJid}`);
+  return;
 }
 
-// INBOUND POLLING LOOP WITH INTELLIGENT CONCIERGE & DEDUPLICATION
 async function pollInboundMessages() {
-  try {
-    const res = await requestEvolution(`/chat/findMessages/${INSTANCE}`, 'POST', { page: 1, limit: 15 });
-    if (res.status !== 200 || !res.body || !res.body.messages || !Array.isArray(res.body.messages.records)) return;
-
-    const records = res.body.messages.records;
-
-    if (!isWhatsAppInitialized) {
-      for (const r of records) {
-        if (r.key && r.key.id) answeredMessageIds.add(r.key.id);
-      }
-      isWhatsAppInitialized = true;
-      console.log(`[HUMAN AI CONCIERGE INITIALIZED] Listening for customer chats 24/7...`);
-      return;
-    }
-
-    for (const record of records) {
-      await processIncomingRecord(record);
-    }
-  } catch (err) {}
+  // COMPLETELY DISABLED INBOUND POLLING FOR AUTO-RESPOND
+  return;
 }
 
 // -------------------------------------------------------------
@@ -888,7 +650,7 @@ app.get('/', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Drivri 24/7 Lead Acquisition & WhatsApp AI Dashboard</title>
+      <title>Drivri 24/7 Lead Acquisition & Dashboard</title>
       <script src="https://cdn.tailwindcss.com"></script>
       <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
       <style>
@@ -902,7 +664,7 @@ app.get('/', (req, res) => {
           <div class="w-10 h-10 rounded-lg bg-cyan-500 flex items-center justify-center font-bold text-slate-900 text-xl">D</div>
           <div>
             <h1 class="text-xl font-bold tracking-wide text-white">Drivri 24/7 Fleet & Lead Control Center</h1>
-            <p class="text-xs text-cyan-400">WhatsApp AI Concierge • Stripe Payments • Resend Invoicing • PDF Audit</p>
+            <p class="text-xs text-cyan-400">Stripe Payments • Resend Invoicing • PDF Audit (WhatsApp Auto-Respond OFF)</p>
           </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -1094,12 +856,10 @@ app.get('/', (req, res) => {
   res.send(html);
 });
 
-// START EXPRESS SERVER & INBOUND CONCIERGE POLLING
+// START EXPRESS SERVER (WHATSAPP AUTO-RESPOND DISABLED)
 app.listen(PORT, () => {
   console.log("==================================================");
   console.log(`DRIVRI 24/7 CONCIERGE & DASHBOARD SERVER ONLINE PORT ${PORT}`);
-  console.log("60-Lead Dynamic Outreach Campaign Engine Active");
+  console.log("WHATSAPP BOT AUTO-RESPOND: COMPLETELY KILLED");
   console.log("==================================================");
-
-  setInterval(pollInboundMessages, 4000);
 });
