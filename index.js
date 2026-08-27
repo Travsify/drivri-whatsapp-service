@@ -448,7 +448,54 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// 100% NATURAL HUMAN-LIKE CONVERSATIONAL DESK AGENT ENGINE
+// DYNAMIC LLM / HUMAN AI DESK AGENT INTEGRATION
+// -------------------------------------------------------------
+async function callLLMBrain(history, incomingText) {
+  const openAiKey = process.env.OPENAI_API_KEY;
+  if (!openAiKey) return null;
+
+  const systemPrompt = `You are Alex, a senior customer operations manager at Drivri Logistics & Globalline Customs in London. You communicate via WhatsApp.
+You are 100% human, polite, warm, professional, and clear.
+Respond directly to whatever the user said or asked.
+Keep responses concise (1 to 3 short sentences maximum).
+Never send canned broadcasts, marketing price dumps, or robotic greetings.
+Key Business Knowledge:
+- Van Hire: SWB (£18/h, £108/d), MWB (£24/h, £144/d), LWB (£28/h, £168/d), Luton (£32/h, £192/d), Refrigerated (£42/h, £252/d). Includes 200 miles daily.
+- Driver Allocation: Cat B (£25/h), Cat C1 (£32/h), Cat C HGV (£28/h), Cat D1 (£34/h), Cat C+E (£30/h).
+- UK Customs Clearance: CDS Import declarations fixed at £65 + 20% VAT (£78 Gross) for Heathrow, Gatwick, sea ports with instant airport badge release.
+- Support Phone: +44 7988 599 326. Email: info@drivri.co.uk.`;
+
+  return new Promise((resolve) => {
+    try {
+      const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: incomingText }];
+      const postData = JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: 150 });
+      const req = https.request('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${openAiKey}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      }, res => {
+        let body = ''; res.on('data', c => body += c);
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(body);
+            if (parsed.choices && parsed.choices[0] && parsed.choices[0].message) {
+              resolve(parsed.choices[0].message.content.trim());
+            } else { resolve(null); }
+          } catch(e) { resolve(null); }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.write(postData);
+      req.end();
+    } catch(e) { resolve(null); }
+  });
+}
+
+// -------------------------------------------------------------
+// 100% HUMAN CONVERSATIONAL DESK AGENT ENGINE
 // -------------------------------------------------------------
 async function handleHumanConversation(targetJid, incomingText) {
   const text = incomingText.trim();
@@ -456,6 +503,7 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   let state = customerMemory.get(targetJid) || {
     messagesCount: 0,
+    history: [],
     service: null,
     email: '',
     postcode: '',
@@ -469,21 +517,39 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
-  // 1. REPEAT / GLITCH INQUIRIES ("why is this repeating", "stop repeating", "why repeated", "is not good")
-  if (lower.includes('repeat') || lower.includes('repeating') || lower.includes('not good') || lower.includes('glitch') || lower.includes('again')) {
+  // Try LLM API first if key configured
+  const llmReply = await callLLMBrain(state.history, text);
+  if (llmReply) {
+    state.history.push({ role: 'user', content: text });
+    state.history.push({ role: 'assistant', content: llmReply });
+    if (state.history.length > 10) state.history.splice(0, 2);
     customerMemory.set(targetJid, state);
-    await sendText(targetJid, `Ah, really sorry about that! 👋 Had a quick network delay on our desk system. I'm right here now—what can I help you get sorted today?`);
+    await sendText(targetJid, llmReply);
     return;
   }
 
-  // 2. TIMELINE / SCHEDULE QUESTIONS ("when today", "what time", "when will it arrive", "how soon")
+  // 1. REPEAT / GLITCH INQUIRIES ("why is this repeating", "stop repeating", "why repeated", "is not good")
+  if (lower.includes('repeat') || lower.includes('repeating') || lower.includes('not good') || lower.includes('glitch') || lower.includes('again')) {
+    customerMemory.set(targetJid, state);
+    await sendText(targetJid, `Ah, really sorry about that! 👋 Had a temporary network delay on our desk system. I'm right here now—what can I help you get sorted today?`);
+    return;
+  }
+
+  // 2. COMPANY INFO INQUIRIES ("company info", "who are you", "what company", "may i know your company")
+  if (lower.includes('company info') || lower.includes('who are you') || lower.includes('what company') || lower.includes('may i know your company') || lower.includes('tell me about')) {
+    customerMemory.set(targetJid, state);
+    await sendText(targetJid, `We are Drivri Logistics & Globalline Customs, based in London! We handle 24/7 self-drive van rentals, driver allocations, and UK CDS customs clearance (£65 fixed fee). What can I get sorted for you today?`);
+    return;
+  }
+
+  // 3. TIMELINE / SCHEDULE QUESTIONS ("when today", "what time", "when will it arrive", "how soon")
   if (lower.includes('when today') || lower.includes('what time') || lower.includes('when will') || lower.includes('how soon') || lower.includes('delivery time')) {
     customerMemory.set(targetJid, state);
     await sendText(targetJid, `We can arrange that for you today! What specific time or UK location/postcode works best for you?`);
     return;
   }
 
-  // 3. SHORT ACKNOWLEDGMENTS ("ok", "ones is okay", "sure", "thanks", "got it")
+  // 4. SHORT ACKNOWLEDGMENTS ("ok", "ones is okay", "sure", "thanks", "got it")
   if (lower === 'ok' || lower === 'okay' || lower === 'ones is okay' || lower === 'one\'s is okay' || lower === 'sure' || lower === 'thanks' || lower === 'got it') {
     customerMemory.set(targetJid, state);
     if (state.messagesCount > 1) {
@@ -492,7 +558,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     }
   }
 
-  // 4. ONGOING CHAT: IF ALREADY IN DIALOGUE, NEVER REPEAT CANNED GREETING!
+  // 5. ONGOING CHAT: IF ALREADY IN DIALOGUE, NEVER REPEAT CANNED GREETING!
   const isSimpleGreeting = lower === 'hi' || lower === 'hello' || lower === 'hey' || lower === 'good morning' || lower === 'good afternoon' || lower === 'hi there';
 
   if (isSimpleGreeting) {
@@ -505,7 +571,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     return;
   }
 
-  // 5. CUSTOMS CLEARANCE FLOW
+  // 6. CUSTOMS CLEARANCE FLOW
   if (lower.includes('custom') || lower.includes('clearance') || lower.includes('ck3arance') || lower.includes('import') || lower.includes('export') || lower.includes('eori') || lower.includes('mawb')) {
     state.service = 'CUSTOMS';
     customerMemory.set(targetJid, state);
@@ -524,7 +590,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     return;
   }
 
-  // 6. VAN HIRE FLOW
+  // 7. VAN HIRE FLOW
   if (lower.includes('van') || lower.includes('luton') || lower.includes('medium') || lower.includes('small') || lower.includes('large') || lower.includes('refrigerated') || lower.includes('hire') || lower.includes('rent')) {
     state.service = 'VAN_HIRE';
     if (lower.includes('luton')) state.vanCategory = 'luton';
@@ -559,7 +625,7 @@ async function handleHumanConversation(targetJid, incomingText) {
     return;
   }
 
-  // 7. NATURAL HUMAN DESK FALLBACK (NO REPETITIVE BROADCASTS!)
+  // 8. NATURAL HUMAN DESK FALLBACK
   customerMemory.set(targetJid, state);
   await sendText(targetJid, `Got it! Let me know a few more details or your postcode and I'll get that sorted for you right away.`);
 }
