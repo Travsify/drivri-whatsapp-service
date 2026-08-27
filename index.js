@@ -448,11 +448,14 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 }
 
 // -------------------------------------------------------------
-// DYNAMIC LLM / HUMAN AI DESK AGENT INTEGRATION
+// DYNAMIC OPEN-GROUND / OPEN-ROUTER / FREE AI MODEL INTEGRATION
 // -------------------------------------------------------------
 async function callLLMBrain(history, incomingText) {
-  const openAiKey = process.env.OPENAI_API_KEY;
-  if (!openAiKey) return null;
+  const apiKey = process.env.OPEN_GROUND_API_KEY || process.env.OPENROUTER_API_KEY || process.env.FREE_AI_API_KEY || process.env.OPENAI_API_KEY;
+  const baseUrl = process.env.AI_BASE_URL || (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1/chat/completions' : (process.env.OPEN_GROUND_API_KEY ? 'https://api.openground.ai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'));
+  const modelName = process.env.AI_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+
+  if (!apiKey) return null;
 
   const systemPrompt = `You are Alex, a senior customer operations manager at Drivri Logistics & Globalline Customs in London. You communicate via WhatsApp.
 You are 100% human, polite, warm, professional, and clear.
@@ -468,11 +471,16 @@ Key Business Knowledge:
   return new Promise((resolve) => {
     try {
       const messages = [{ role: 'system', content: systemPrompt }, ...history, { role: 'user', content: incomingText }];
-      const postData = JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: 150 });
-      const req = https.request('https://api.openai.com/v1/chat/completions', {
+      const postData = JSON.stringify({ model: modelName, messages, max_tokens: 150 });
+      const url = new URL(baseUrl);
+
+      const req = https.request({
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname + url.search,
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${openAiKey}`,
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData)
         }
@@ -517,7 +525,7 @@ async function handleHumanConversation(targetJid, incomingText) {
 
   const complyCubeLink = `${PUBLIC_DOMAIN}/verify-id.html?session=DRV-${Date.now()}`;
 
-  // Try LLM API first if key configured
+  // Try LLM API first (OpenGround / OpenRouter / Free AI models)
   const llmReply = await callLLMBrain(state.history, text);
   if (llmReply) {
     state.history.push({ role: 'user', content: text });
