@@ -453,7 +453,7 @@ function sendResendEmail(toEmail, subject, htmlContent) {
 async function callLLMBrain(history, incomingText) {
   const apiKey = process.env.OPEN_GROUND_API_KEY || process.env.OPENROUTER_API_KEY || process.env.FREE_AI_API_KEY || process.env.OPENAI_API_KEY;
   const baseUrl = process.env.AI_BASE_URL || (process.env.OPENROUTER_API_KEY ? 'https://openrouter.ai/api/v1/chat/completions' : (process.env.OPEN_GROUND_API_KEY ? 'https://api.openground.ai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions'));
-  const modelName = process.env.AI_MODEL || 'meta-llama/llama-3.1-8b-instruct:free';
+  const modelName = process.env.AI_MODEL || 'openrouter/free';
 
   if (!apiKey) return null;
 
